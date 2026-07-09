@@ -332,36 +332,37 @@ function LoadingCopy() {
 
 function EmptyPreview() {
   const previews = [
-    { bucket: "grand" as const, label: "Grand voice" },
-    { bucket: "mythic" as const, label: "Mythic voice" },
-    { bucket: "chaotic" as const, label: "Chaotic voice" },
+    { bucket: "grand" as const, label: "Grand", text: "Confident and generous" },
+    { bucket: "mythic" as const, label: "Mythic", text: "Warm with a little wonder" },
+    { bucket: "chaotic" as const, label: "Chaotic", text: "Playful, high-energy praise" },
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-[24px] border border-[var(--line)] bg-[var(--panel-raised)] p-5">
-        <p className="v2-display text-xl font-semibold text-[var(--text)]">The compliment council is waiting.</p>
-        <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-muted)]">
-          Add a role or person details, then HypeForge summons three distinct voices: Grand, Mythic, and Chaotic.
-        </p>
+    <section className="rounded-[22px] border border-[var(--line)] bg-[var(--panel-raised)] p-5 sm:p-6" aria-label="Your future compliment deck">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Step 2 · Your deck</p>
+          <h3 className="v2-display mt-2 text-2xl font-semibold text-[var(--text)]">Your three compliments will appear here.</h3>
+          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[var(--text-muted)]">
+            Describe someone on the left, then choose the version that feels most like them.
+          </p>
+        </div>
+        <span className="v2-mono inline-flex rounded-full border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-xs font-bold text-[var(--text-muted)]">
+          3 voices
+        </span>
       </div>
-      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-6 grid gap-3 border-t border-[var(--line)] pt-5 md:grid-cols-3">
         {previews.map((preview) => (
-          <div
-            className="min-h-[230px] rounded-[24px] border border-dashed bg-[var(--panel-raised)] p-5"
-            key={preview.bucket}
-            style={{ borderColor: `${BUCKET_ACCENT[preview.bucket]}66` }}
-          >
-            <div className="v2-mono text-xs uppercase text-[var(--text-faint)]">{preview.label}</div>
-            <div className="mt-8 space-y-3">
-              <div className="h-3 rounded-full bg-[var(--muted-fill)]" />
-              <div className="h-3 w-10/12 rounded-full bg-[var(--muted-fill)]" />
-              <div className="h-3 w-7/12 rounded-full bg-[var(--muted-fill)]" />
+          <div className="flex items-start gap-3" key={preview.bucket}>
+            <span aria-hidden="true" className="mt-1.5 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: BUCKET_ACCENT[preview.bucket] }} />
+            <div>
+              <p className="v2-mono text-xs font-bold uppercase text-[var(--text)]">{preview.label}</p>
+              <p className="mt-1 text-sm font-medium leading-5 text-[var(--text-muted)]">{preview.text}</p>
             </div>
           </div>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -369,7 +370,7 @@ function LoadingPreview() {
   return (
     <div className="space-y-4">
       <LoadingCopy />
-      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
         {["grand", "mythic", "chaotic"].map((bucket) => (
           <div
             className="v2-card min-h-[330px] animate-pulse p-5"
@@ -459,7 +460,7 @@ function V2Card({
       </header>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[var(--dark-line)] py-3">
-        <Tooltip label="Helpful: use more of this feeling">
+        <Tooltip align="start" label="Helpful: use more of this feeling">
           <button
             aria-label={`Like ${card.personaName} compliment`}
             aria-pressed={card.feedback === "up"}
@@ -471,7 +472,7 @@ function V2Card({
             <ThumbsUp aria-hidden="true" className="size-4" />
           </button>
         </Tooltip>
-        <Tooltip label="Not for me: use less of this feeling">
+        <Tooltip align="start" label="Not for me: use less of this feeling">
           <button
             aria-label={`Dislike ${card.personaName} compliment`}
             aria-pressed={card.feedback === "down"}
@@ -823,6 +824,12 @@ export default function V2Page() {
     );
   }, []);
 
+  const focusDeck = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      document.getElementById("v2-deck")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
   const generate = useCallback(async () => {
     if (isGenerating) return;
     if (!trimmedInput || trimmedInput.length < MIN_INPUT_LENGTH) {
@@ -859,7 +866,10 @@ export default function V2Page() {
       if (isApiErrorResponse(body)) {
         const nextCards = hasVisibleCards(body) ? hydrateCards(body.cards) : [];
         setCards(nextCards);
-        if (nextCards.length > 0) persistDeck(nextCards, crypto.randomUUID());
+        if (nextCards.length > 0) {
+          persistDeck(nextCards, crypto.randomUUID());
+          focusDeck();
+        }
         setGlobalError(globalErrorMessage(body));
         return;
       }
@@ -867,7 +877,10 @@ export default function V2Page() {
       if (!response.ok || !isGenerateResponse(body)) {
         const nextCards = hasVisibleCards(body) ? hydrateCards(body.cards) : [];
         setCards(nextCards);
-        if (nextCards.length > 0) persistDeck(nextCards, crypto.randomUUID());
+        if (nextCards.length > 0) {
+          persistDeck(nextCards, crypto.randomUUID());
+          focusDeck();
+        }
         setGlobalError(globalErrorMessage(body));
         return;
       }
@@ -875,13 +888,14 @@ export default function V2Page() {
       const nextCards = hydrateCards(body.cards);
       setCards(nextCards);
       persistDeck(nextCards, crypto.randomUUID());
+      focusDeck();
     } catch (error) {
       logApiExchange({ endpoint: "POST /api/generate", payload, startedAt, error });
       setGlobalError("The forge hiccuped. The compliment engine got overwhelmed by your brilliance. Try again.");
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, persistDeck, tasteContext, trimmedInput]);
+  }, [focusDeck, isGenerating, persistDeck, tasteContext, trimmedInput]);
 
   const escalate = useCallback(
     async (cardId: string) => {
@@ -1253,10 +1267,7 @@ export default function V2Page() {
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <p className="v2-mono hidden text-right text-[0.68rem] uppercase text-[var(--text-muted)] sm:block">
-              Private saved decks · no sign-in
-            </p>
-            <Tooltip className="hidden min-[380px]:inline-flex" label="Compliment guide">
+            <Tooltip align="end" className="hidden min-[380px]:inline-flex" label="Compliment guide">
               <button
                 aria-label="Open compliment guide"
                 className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
@@ -1266,7 +1277,7 @@ export default function V2Page() {
                 <BookOpen aria-hidden="true" className="size-4" />
               </button>
             </Tooltip>
-            <Tooltip label="Saved compliment decks">
+            <Tooltip align="end" label="Saved compliment decks">
               <button
                 aria-label="Open saved compliment decks"
                 className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
@@ -1278,7 +1289,7 @@ export default function V2Page() {
               </button>
             </Tooltip>
             {cards.some((card) => card.text.trim()) ? (
-              <Tooltip label="Create a share link">
+              <Tooltip align="end" label="Create a share link">
                 <button
                   aria-label="Share this compliment deck"
                   className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
@@ -1289,7 +1300,7 @@ export default function V2Page() {
                 </button>
               </Tooltip>
             ) : null}
-            <Tooltip label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}>
+            <Tooltip align="end" label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}>
               <button
                 aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
                 className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
@@ -1310,16 +1321,15 @@ export default function V2Page() {
 
       <section className="mx-auto grid max-w-[1600px] gap-6 px-4 py-6 sm:px-6 lg:items-start lg:grid-cols-[430px_minmax(0,1fr)] lg:px-8 lg:py-10">
         <section
-          className="self-start rounded-[28px] border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6 lg:sticky lg:top-24"
+          className="self-start rounded-[24px] border border-[var(--line-strong)] bg-[var(--panel)] p-5 sm:p-6 lg:sticky lg:top-24"
           style={{ boxShadow: "var(--panel-shadow)" }}
         >
-          <p className="v2-mono text-[0.68rem] uppercase text-[var(--cyan)]">AI Compliment Generator</p>
-          <h1 className="v2-display mt-4 text-4xl font-semibold leading-none text-[var(--text)] md:text-5xl">
-            Turn any person into a <span className="v2-gradient-text">living legend.</span>
+          <p className="v2-mono text-[0.68rem] uppercase text-[var(--cyan)]">Step 1 · Start here</p>
+          <h1 className="v2-display mt-3 text-3xl font-semibold leading-tight text-[var(--text)] sm:text-4xl">
+            Create three <span className="v2-gradient-text">distinct compliments.</span>
           </h1>
           <p className="mt-4 text-sm font-medium leading-6 text-[var(--text-muted)]">
-            Type a job title or a few details. HypeForge returns three unreasonably generous compliments, each with
-            its own flavor of dramatic chaos.
+            Add a person, role, or recent win. You will get one Grand, one Mythic, and one Chaotic version.
           </p>
 
           <form
@@ -1331,13 +1341,14 @@ export default function V2Page() {
           >
             <div className="space-y-2">
               <label className="v2-mono text-[0.68rem] uppercase text-[var(--text-muted)]" htmlFor="v2-subject">
-                Who are we hyping?
+                Describe the person
               </label>
               <textarea
-                className="min-h-28 w-full resize-none rounded-[24px] border border-[var(--line)] bg-[var(--input-bg)] px-4 py-4 text-base font-semibold leading-7 text-[var(--text)] outline-none transition placeholder:text-[var(--input-placeholder)] focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
+                aria-describedby="v2-subject-help"
+                className="min-h-32 w-full resize-none rounded-[18px] border border-[var(--line-strong)] bg-[var(--input-bg)] px-4 py-4 text-base font-semibold leading-7 text-[var(--text)] outline-none transition placeholder:text-[var(--input-placeholder)] focus:border-[var(--purple)] focus:ring-4 focus:ring-[#8b5cf6]/20"
                 id="v2-subject"
                 maxLength={MAX_INPUT_LENGTH}
-                placeholder="e.g. Customer Success Manager, Recruiter, or my friend Sara who fixes every crisis"
+                placeholder="e.g. Customer Success Manager who keeps every client calm"
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 onKeyDown={(event) => {
@@ -1347,39 +1358,16 @@ export default function V2Page() {
                   }
                 }}
               />
-              <div className="flex items-center justify-between gap-3 text-xs font-bold text-[var(--text-faint)]">
-                <span>Three voices. One click. Maximum admiration.</span>
+              <div className="flex items-center justify-between gap-3 text-xs font-bold text-[var(--text-faint)]" id="v2-subject-help">
+                <span>Start with a role, name, or a specific thing they do.</span>
                 <span>
                   {input.length}/{MAX_INPUT_LENGTH}
                 </span>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex flex-wrap gap-2">
-                {(examplesExpanded ? EXAMPLES : EXAMPLES.slice(0, 3)).map((example) => (
-                  <button
-                    className="min-h-10 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[#8b5cf6]/70 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:text-sm"
-                    key={example}
-                    type="button"
-                    onClick={() => setInput(example)}
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
-              <button
-                aria-expanded={examplesExpanded}
-                className="text-xs font-bold text-[var(--purple)] underline decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                type="button"
-                onClick={() => setExamplesExpanded((current) => !current)}
-              >
-                {examplesExpanded ? "Show fewer ideas" : `Show ${EXAMPLES.length - 3} more ideas`}
-              </button>
-            </div>
-
             <button
-              className="v2-gradient-button inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[14px] px-5 py-3 text-base font-bold text-white shadow-lg shadow-[#ff6b5f]/20 transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:grayscale focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--ink)] px-5 py-3 text-base font-bold text-[var(--paper)] shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-[#2a2530] disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-[#a69d99] disabled:text-[#f9f4ec] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
               disabled={!canGenerate || isGenerating}
               type="submit"
             >
@@ -1388,18 +1376,53 @@ export default function V2Page() {
               ) : (
                 <WandSparkles aria-hidden="true" className="size-5" />
               )}
-              {!trimmedInput ? "Add someone to hype first" : isGenerating ? "Forging admiration..." : "Forge 3 compliments"}
+              {isGenerating ? "Creating your compliments..." : "Generate 3 compliments"}
             </button>
+            <p className="text-center text-xs font-semibold text-[var(--text-faint)]" role="status">
+              {canGenerate ? "Three distinct versions, ready in a few seconds." : "Write a person above to enable generation."}
+            </p>
+
+            <div className="border-t border-[var(--line)] pt-4">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-bold text-[var(--text-muted)]">Need an idea?</p>
+                <button
+                  aria-expanded={examplesExpanded}
+                  className="text-xs font-bold text-[var(--purple)] underline decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                  type="button"
+                  onClick={() => setExamplesExpanded((current) => !current)}
+                >
+                  {examplesExpanded ? "Show fewer" : `Show ${EXAMPLES.length - 3} more`}
+                </button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(examplesExpanded ? EXAMPLES : EXAMPLES.slice(0, 3)).map((example) => (
+                  <button
+                    className="min-h-9 rounded-[12px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:border-[var(--purple)] hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/25"
+                    key={example}
+                    type="button"
+                    onClick={() => setInput(example)}
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+            </div>
           </form>
         </section>
 
-        <section className="min-w-0 space-y-5" aria-live="polite">
+        <section className="min-w-0 scroll-mt-24 space-y-5" id="v2-deck" aria-live="polite">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Compliment deck</p>
-              <h2 className="v2-display mt-1 text-3xl font-semibold text-[var(--text)]">Three dramatic voices</h2>
+              <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">
+                {cards.length > 0 ? "Your compliment deck" : "Step 2 · Your deck"}
+              </p>
+              <h2 className="v2-display mt-1 text-3xl font-semibold text-[var(--text)]">
+                {cards.length > 0 ? "Three distinct voices" : "Your deck, ready when you are"}
+              </h2>
               <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[var(--text-muted)]">
-                Each card keeps its own memory. Escalate one without changing the others.
+                {cards.length > 0
+                  ? "Each card keeps its own memory. Make one more dramatic without changing the others."
+                  : "Your Grand, Mythic, and Chaotic compliments will appear here after you generate."}
               </p>
             </div>
             {cards.length > 0 ? (
@@ -1445,7 +1468,7 @@ export default function V2Page() {
           {isGenerating && cards.length === 0 ? <LoadingPreview /> : null}
 
           {cards.length > 0 ? (
-            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {cards.map((card, index) => (
                 <V2Card
                   card={card}

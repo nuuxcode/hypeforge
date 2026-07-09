@@ -63,7 +63,7 @@ export function DeckHistoryDrawer({
             <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Private workspace</p>
             <h2 className="v2-display mt-1 text-xl font-semibold text-[var(--text)]">Saved compliment decks</h2>
           </div>
-          <Tooltip label="Close saved decks">
+          <Tooltip align="end" label="Close saved decks">
             <button
               aria-label="Close saved decks"
               className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
@@ -147,7 +147,7 @@ export function DeckHistoryDrawer({
                       {entry.cards.map((card) => card.personaName).join(" · ")}
                     </p>
                   </button>
-                  <Tooltip className="absolute right-3 top-3" label="Delete saved deck">
+                  <Tooltip align="end" className="absolute right-3 top-3" label="Delete saved deck">
                     <button
                       aria-label={`Delete saved deck for ${entry.input}`}
                       className="grid size-9 place-items-center rounded-[12px] text-[var(--text-faint)] transition hover:bg-[#ff6b5f]/10 hover:text-[var(--coral)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
