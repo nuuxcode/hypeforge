@@ -54,7 +54,7 @@ describe("POST /api/generate", () => {
     expect(generateCompliment).not.toHaveBeenCalled();
   });
 
-  it("returns backend debug details when all provider calls fail", async () => {
+  it("falls back to local compliments and returns backend debug details when provider calls fail", async () => {
     vi.mocked(generateCompliment).mockRejectedValue(new Error("quota exceeded for gemini-2.5-flash"));
 
     const response = await POST(
@@ -66,10 +66,15 @@ describe("POST /api/generate", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.ok).toBe(false);
-    expect(body.error).toContain("overwhelmed");
+    expect(body.ok).toBe(true);
     expect(body.cards).toHaveLength(3);
+    expect(body.cards.every((card: { status: string; text: string }) => card.status === "idle" && card.text.length > 0)).toBe(
+      true,
+    );
     expect(body.debug.events.some((event: { message: string }) => event.message === "persona generation failed")).toBe(
+      true,
+    );
+    expect(body.debug.events.some((event: { message: string }) => event.message === "local compliment fallback generated")).toBe(
       true,
     );
     expect(JSON.stringify(body.debug)).toContain("quota exceeded");

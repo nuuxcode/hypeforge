@@ -1,5 +1,6 @@
 import { generateCompliment } from "@/lib/ai";
 import { createApiDebug, withDebug } from "@/lib/debug";
+import { generateLocalCompliment } from "@/lib/localCompliments";
 import { pickOnePerBucket } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
 import { checkAndIncrement } from "@/lib/rateLimit";
@@ -24,6 +25,16 @@ function cookieHeader(value: string): string {
 function shouldRetry(error: unknown): boolean {
   const message = (error as Error).message ?? "";
   return !/(quota|billing|denied access|api key|rate.?limit|high demand)/i.test(message);
+}
+
+function generateLocalFallback(persona: Persona, input: string, debug: ReturnType<typeof createApiDebug>): string {
+  const text = generateLocalCompliment(persona, input);
+  debug.providerInfo("local compliment fallback generated", {
+    personaId: persona.id,
+    personaName: persona.name,
+    characterCount: text.length,
+  });
+  return text;
 }
 
 async function generateForPersona(
@@ -51,7 +62,7 @@ async function generateForPersona(
       retryable: shouldRetry(error),
       error,
     });
-    if (!shouldRetry(error)) throw error;
+    if (!shouldRetry(error)) return generateLocalFallback(persona, input, debug);
     debug.providerInfo("retrying persona generation once", {
       personaId: persona.id,
       personaName: persona.name,
@@ -70,7 +81,7 @@ async function generateForPersona(
         personaName: persona.name,
         error: retryError,
       });
-      throw retryError;
+      return generateLocalFallback(persona, input, debug);
     }
   }
 }
