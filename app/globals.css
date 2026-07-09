@@ -1,0 +1,25 @@
+@import "tailwindcss";
+
+@theme {
+  --color-forge-500: #db5b2a;
+  --color-brass-500: #f7c948;
+  --color-mint-700: #2f5d50;
+  --color-cobalt-600: #334eac;
+}
+
+html, body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background:
+    linear-gradient(rgba(21, 21, 21, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 21, 21, 0.045) 1px, transparent 1px),
+    #f5efe2;
+  background-size: 28px 28px;
+}
+
+button,
+textarea {
+  letter-spacing: 0;
+}
