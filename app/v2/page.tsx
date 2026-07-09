@@ -1,0 +1,821 @@
+"use client";
+
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  Copy,
+  History,
+  Layers3,
+  LoaderCircle,
+  RotateCcw,
+  Share2,
+  Sparkles,
+  WandSparkles,
+} from "lucide-react";
+import { PERSONAS } from "@/lib/personas";
+import type {
+  ApiDebug,
+  ApiErrorResponse,
+  ComplimentCard as ComplimentCardType,
+  EscalateResponse,
+  GenerateResponse,
+  PersonaBucket,
+} from "@/lib/types";
+import { MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
+
+const EXAMPLES = [
+  "Customer Success Manager",
+  "Recruiter who never misses",
+  "Founding Engineer",
+  "my friend Sara who fixes every crisis",
+  "a teacher who makes everyone believe in themselves",
+  "a product manager with impossible calendar skills",
+] as const;
+
+const BUCKET_ACCENT: Record<PersonaBucket, string> = {
+  grand: "#8b5cf6",
+  mythic: "#70e8dd",
+  chaotic: "#ff6b5f",
+};
+
+const PERSONA_BUCKET = Object.fromEntries(PERSONAS.map((persona) => [persona.id, persona.bucket])) as Record<
+  string,
+  PersonaBucket
+>;
+
+const LOADING_LINES = [
+  "Summoning three compliments from the Department of Excessive Admiration...",
+  "Consulting the compliment council...",
+  "Inflating the metaphor balloon...",
+  "Adding tasteful chaos...",
+  "Polishing the crown...",
+] as const;
+
+type RetryResponse = {
+  ok?: true;
+  text: string;
+  history: string[];
+  dramaLevel: number;
+  debug?: ApiDebug;
+};
+
+function isGenerateResponse(value: unknown): value is GenerateResponse {
+  return Boolean(value && typeof value === "object" && Array.isArray((value as GenerateResponse).cards));
+}
+
+function isEscalateResponse(value: unknown): value is EscalateResponse {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      typeof (value as EscalateResponse).text === "string" &&
+      Array.isArray((value as EscalateResponse).history) &&
+      typeof (value as EscalateResponse).dramaLevel === "number",
+  );
+}
+
+function isRetryResponse(value: unknown): value is RetryResponse {
+  return isEscalateResponse(value);
+}
+
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as ApiErrorResponse).ok === false &&
+      typeof (value as ApiErrorResponse).error === "string",
+  );
+}
+
+function hasVisibleCards(value: unknown): value is { cards: ComplimentCardType[] } {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      Array.isArray((value as { cards?: unknown }).cards) &&
+      (value as { cards: ComplimentCardType[] }).cards.length > 0,
+  );
+}
+
+function getDebug(value: unknown): ApiDebug | undefined {
+  if (value && typeof value === "object" && "debug" in value) {
+    return (value as { debug?: ApiDebug }).debug;
+  }
+  return undefined;
+}
+
+function globalErrorMessage(body: unknown): string {
+  if (isApiErrorResponse(body) && body.error.includes("Too much brilliance")) {
+    return "Too much brilliance at once. Give it a second.";
+  }
+  if (isApiErrorResponse(body) && body.error.includes("Add someone")) {
+    return "Add someone to hype first.";
+  }
+  return "The forge hiccuped. The compliment engine got overwhelmed by your brilliance. Try again.";
+}
+
+function cardErrorMessage(body: unknown): string {
+  if (isApiErrorResponse(body) && body.error.includes("Too much brilliance")) {
+    return "Too much brilliance at once. Give it a second.";
+  }
+  return "This persona lost the plot for a second. Retry this card.";
+}
+
+function logApiExchange(args: {
+  endpoint: string;
+  payload: unknown;
+  status?: number;
+  ok?: boolean;
+  body?: unknown;
+  startedAt: number;
+  error?: unknown;
+}) {
+  const elapsedMs = Math.round(performance.now() - args.startedAt);
+  const debug = getDebug(args.body);
+  const requestId = debug?.requestId ?? "no-request-id";
+  const statusLabel = args.status ? `${args.status}` : "network-error";
+  const okLabel = args.ok ? "ok" : "failed";
+
+  console.groupCollapsed(`[HypeForge V2 API] ${args.endpoint} ${statusLabel} ${okLabel} ${requestId} ${elapsedMs}ms`);
+  console.log("Request payload", args.payload);
+  if (args.body !== undefined) console.log("Response body", args.body);
+  if (args.error) console.error("Network/client error", args.error);
+  if (debug) {
+    console.log("Server debug", debug);
+    console.table(
+      debug.events.map((event) => ({
+        time: event.timestamp,
+        level: event.level,
+        scope: event.scope,
+        message: event.message,
+      })),
+    );
+  }
+  if (!args.ok) console.warn("Handled API failure", { status: args.status, body: args.body, error: args.error });
+  console.groupEnd();
+}
+
+function fallbackCopy(text: string): void {
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.top = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand("copy");
+  document.body.removeChild(textarea);
+  if (!copied) throw new Error("Fallback copy failed");
+}
+
+function dramaButtonLabel(level: number): string {
+  if (level <= 1) return "Make it more dramatic";
+  if (level === 2) return "Make it wildly excessive";
+  if (level === 3) return "Summon the prophecy";
+  return "Launch it into mythology";
+}
+
+function badgeLabel(level: number): string {
+  return `DRAMA · ${String(level).padStart(2, "0")}`;
+}
+
+function bucketFor(card: ComplimentCardType): PersonaBucket {
+  return PERSONA_BUCKET[card.personaId] ?? "grand";
+}
+
+function styleForCard(card: ComplimentCardType, index = 0): CSSProperties {
+  const bucket = bucketFor(card);
+  const heat = Math.min(Math.max((card.dramaLevel - 1) / 3, 0), 1);
+  return {
+    "--bucket-accent": BUCKET_ACCENT[bucket],
+    "--heat": heat,
+    animationDelay: `${index * 80}ms`,
+  } as CSSProperties;
+}
+
+function LoadingCopy() {
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setIndex((current) => (current + 1) % LOADING_LINES.length);
+    }, 1200);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-[var(--text)]">
+      <LoaderCircle aria-hidden="true" className="size-4 shrink-0 animate-spin text-[var(--coral)]" />
+      <span>{LOADING_LINES[index]}</span>
+    </div>
+  );
+}
+
+function EmptyPreview() {
+  const previews = [
+    { bucket: "grand" as const, label: "Grand voice" },
+    { bucket: "mythic" as const, label: "Mythic voice" },
+    { bucket: "chaotic" as const, label: "Chaotic voice" },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-[24px] border border-white/10 bg-white/[0.035] p-5">
+        <p className="v2-display text-xl font-semibold text-[var(--text)]">The compliment council is waiting.</p>
+        <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-muted)]">
+          Add a role or person details, then HypeForge summons three distinct voices: Grand, Mythic, and Chaotic.
+        </p>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        {previews.map((preview) => (
+          <div
+            className="min-h-[230px] rounded-[24px] border border-dashed bg-white/[0.025] p-5"
+            key={preview.bucket}
+            style={{ borderColor: `${BUCKET_ACCENT[preview.bucket]}66` }}
+          >
+            <div className="v2-mono text-xs uppercase text-[var(--text-faint)]">{preview.label}</div>
+            <div className="mt-8 space-y-3">
+              <div className="h-3 rounded-full bg-white/10" />
+              <div className="h-3 w-10/12 rounded-full bg-white/10" />
+              <div className="h-3 w-7/12 rounded-full bg-white/10" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LoadingPreview() {
+  return (
+    <div className="space-y-4">
+      <LoadingCopy />
+      <div className="grid gap-4 lg:grid-cols-3">
+        {["grand", "mythic", "chaotic"].map((bucket) => (
+          <div
+            className="v2-card min-h-[330px] animate-pulse p-5"
+            key={bucket}
+            style={
+              {
+                "--bucket-accent": BUCKET_ACCENT[bucket as PersonaBucket],
+                "--heat": 0,
+              } as CSSProperties
+            }
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="h-3 w-24 rounded-full bg-black/10" />
+              <div className="h-8 w-24 rounded-full bg-black/10" />
+            </div>
+            <div className="mt-12 space-y-4">
+              <div className="h-5 rounded-full bg-black/10" />
+              <div className="h-5 w-11/12 rounded-full bg-black/10" />
+              <div className="h-5 w-8/12 rounded-full bg-black/10" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function V2Card({
+  card,
+  index,
+  onCopy,
+  onEscalate,
+  onRetry,
+}: {
+  card: ComplimentCardType;
+  index: number;
+  onCopy: (cardId: string, text: string) => void;
+  onEscalate: (cardId: string) => void;
+  onRetry: (cardId: string) => void;
+}) {
+  const isLoading = card.status === "loading";
+  const hasText = card.text.trim().length > 0;
+  const bucket = bucketFor(card);
+
+  return (
+    <article
+      aria-busy={isLoading}
+      className="v2-card v2-card-enter flex min-h-[360px] flex-col p-5 sm:p-6"
+      data-loading={isLoading ? "true" : "false"}
+      style={styleForCard(card, index)}
+    >
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="v2-mono text-[0.68rem] uppercase text-[var(--ink-muted)]">Persona label</p>
+          <h2 className="v2-display mt-1 text-xl font-semibold leading-7 text-[var(--ink)]">{card.personaName}</h2>
+          <p className="v2-mono mt-2 text-[0.68rem] uppercase" style={{ color: BUCKET_ACCENT[bucket] }}>
+            {bucket}
+          </p>
+        </div>
+        <span className="v2-mono inline-flex h-9 shrink-0 items-center rounded-full border border-[var(--dark-line)] bg-[#e7e1d6] px-3 text-xs font-bold text-[var(--ink)]">
+          {badgeLabel(card.dramaLevel)}
+        </span>
+      </header>
+
+      <div className="mt-8 flex flex-1 flex-col justify-between gap-6">
+        <div className="space-y-4">
+          {hasText ? (
+            <p aria-live="polite" className="v2-display text-lg font-semibold leading-7 text-[var(--ink)]">
+              {card.text}
+            </p>
+          ) : (
+            <div className="rounded-[18px] border border-dashed border-[var(--dark-line)] bg-[#e7e1d6]/60 p-4">
+              <p className="text-sm font-bold leading-6 text-[var(--ink-muted)]">
+                {card.error ?? "This persona lost the plot for a second. Retry this card."}
+              </p>
+            </div>
+          )}
+
+          {isLoading ? (
+            <div className="flex items-center gap-2 rounded-[14px] bg-[#111015] px-3 py-2 text-sm font-bold text-[var(--paper)]">
+              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              Increasing drama...
+            </div>
+          ) : null}
+
+          {card.error && hasText ? (
+            <div className="rounded-[14px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 px-3 py-2 text-sm font-bold text-[#7b211b]">
+              {card.error}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+          {hasText ? (
+            <button
+              aria-label={`Make ${card.personaName} compliment more dramatic`}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--ink)] px-4 py-2 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+              disabled={isLoading}
+              type="button"
+              onClick={() => onEscalate(card.id)}
+            >
+              {isLoading ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : (
+                <WandSparkles aria-hidden="true" className="size-4" />
+              )}
+              {dramaButtonLabel(card.dramaLevel)}
+            </button>
+          ) : (
+            <button
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--ink)] px-4 py-2 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+              disabled={isLoading}
+              type="button"
+              onClick={() => onRetry(card.id)}
+            >
+              <RotateCcw aria-hidden="true" className="size-4" />
+              Retry this card
+            </button>
+          )}
+
+          <button
+            aria-label={`Copy ${card.personaName} compliment`}
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[#e7e1d6] px-4 py-2 text-sm font-bold text-[var(--ink)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+            disabled={!hasText || isLoading}
+            type="button"
+            onClick={() => onCopy(card.id, card.text)}
+          >
+            {card.copied ? (
+              <Check aria-hidden="true" className="size-4 text-[#446100]" />
+            ) : (
+              <Copy aria-hidden="true" className="size-4" />
+            )}
+            {card.copied ? "Copied!" : "Copy"}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ProofStrip() {
+  const items = [
+    { icon: Layers3, title: "3 voices", text: "Grand, Mythic, and Chaotic voices keep every run varied." },
+    { icon: History, title: "Per-card memory", text: "Escalation updates one compliment without touching the others." },
+    { icon: Share2, title: "One-click copy", text: "Each finished card is ready to share." },
+  ];
+
+  return (
+    <section className="border-y border-white/10 py-8" aria-label="Product proof">
+      <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
+        {items.map((item) => (
+          <div className="flex gap-4 py-3" key={item.title}>
+            <div className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-white/10 bg-white/[0.04] text-[var(--cyan)]">
+              <item.icon aria-hidden="true" className="size-5" />
+            </div>
+            <div>
+              <h3 className="v2-display text-lg font-semibold text-[var(--text)]">{item.title}</h3>
+              <p className="mt-1 text-sm font-medium leading-6 text-[var(--text-muted)]">{item.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export default function V2Page() {
+  const [input, setInput] = useState("");
+  const [cards, setCards] = useState<ComplimentCardType[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [globalError, setGlobalError] = useState<string | null>(null);
+  const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const trimmedInput = input.trim();
+  const canGenerate = useMemo(
+    () => trimmedInput.length >= MIN_INPUT_LENGTH && trimmedInput.length <= MAX_INPUT_LENGTH,
+    [trimmedInput],
+  );
+
+  useEffect(() => {
+    console.info("[HypeForge V2 UI] mounted", {
+      debugTip: "API calls log grouped request/response/server-debug entries here in development.",
+    });
+    const timers = copyTimers.current;
+    return () => Object.values(timers).forEach((timer) => clearTimeout(timer));
+  }, []);
+
+  const setCardCopied = useCallback((cardId: string, copied: boolean) => {
+    setCards((current) => current.map((card) => (card.id === cardId ? { ...card, copied } : card)));
+  }, []);
+
+  const setCardError = useCallback((cardId: string, message: string) => {
+    setCards((current) =>
+      current.map((card) => (card.id === cardId ? { ...card, status: "error", error: message } : card)),
+    );
+  }, []);
+
+  const generate = useCallback(async () => {
+    if (isGenerating) return;
+    if (!trimmedInput || trimmedInput.length < MIN_INPUT_LENGTH) {
+      setGlobalError("Add someone to hype first.");
+      return;
+    }
+    if (trimmedInput.length > MAX_INPUT_LENGTH) {
+      setGlobalError("That is a lot of greatness. Try a shorter version.");
+      return;
+    }
+
+    setIsGenerating(true);
+    setGlobalError(null);
+    setCards([]);
+
+    const payload = { input: trimmedInput };
+    const startedAt = performance.now();
+    try {
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json().catch(() => ({}))) as unknown;
+      logApiExchange({
+        endpoint: "POST /api/generate",
+        payload,
+        status: response.status,
+        ok: response.ok && !isApiErrorResponse(body),
+        body,
+        startedAt,
+      });
+
+      if (isApiErrorResponse(body)) {
+        setCards(hasVisibleCards(body) ? body.cards : []);
+        setGlobalError(globalErrorMessage(body));
+        return;
+      }
+
+      if (!response.ok || !isGenerateResponse(body)) {
+        setCards(hasVisibleCards(body) ? body.cards : []);
+        setGlobalError(globalErrorMessage(body));
+        return;
+      }
+
+      setCards(body.cards);
+    } catch (error) {
+      logApiExchange({ endpoint: "POST /api/generate", payload, startedAt, error });
+      setGlobalError("The forge hiccuped. The compliment engine got overwhelmed by your brilliance. Try again.");
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [isGenerating, trimmedInput]);
+
+  const escalate = useCallback(
+    async (cardId: string) => {
+      const card = cards.find((item) => item.id === cardId);
+      if (!card || card.status === "loading" || !card.text) return;
+
+      setCards((current) =>
+        current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
+      );
+
+      const payload = {
+        personaId: card.personaId,
+        originalInput: card.originalInput,
+        currentText: card.text,
+        history: card.history,
+        dramaLevel: card.dramaLevel,
+      };
+      const startedAt = performance.now();
+      try {
+        const response = await fetch("/api/escalate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = (await response.json().catch(() => ({}))) as unknown;
+        logApiExchange({
+          endpoint: "POST /api/escalate",
+          payload,
+          status: response.status,
+          ok: response.ok && !isApiErrorResponse(body),
+          body,
+          startedAt,
+        });
+
+        if (isApiErrorResponse(body)) {
+          setCardError(cardId, cardErrorMessage(body));
+          return;
+        }
+
+        if (!response.ok || !isEscalateResponse(body)) {
+          setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+          return;
+        }
+
+        setCards((current) =>
+          current.map((item) =>
+            item.id === cardId
+              ? {
+                  ...item,
+                  text: body.text,
+                  history: body.history,
+                  dramaLevel: body.dramaLevel,
+                  status: "idle",
+                  error: undefined,
+                  copied: false,
+                }
+              : item,
+          ),
+        );
+      } catch (error) {
+        logApiExchange({ endpoint: "POST /api/escalate", payload, startedAt, error });
+        setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+      }
+    },
+    [cards, setCardError],
+  );
+
+  const retryCard = useCallback(
+    async (cardId: string) => {
+      const card = cards.find((item) => item.id === cardId);
+      if (!card || card.status === "loading") return;
+
+      setCards((current) =>
+        current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
+      );
+
+      const payload = { personaId: card.personaId, originalInput: card.originalInput };
+      const startedAt = performance.now();
+      try {
+        const response = await fetch("/api/retry", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = (await response.json().catch(() => ({}))) as unknown;
+        logApiExchange({
+          endpoint: "POST /api/retry",
+          payload,
+          status: response.status,
+          ok: response.ok && !isApiErrorResponse(body),
+          body,
+          startedAt,
+        });
+
+        if (!response.ok || isApiErrorResponse(body) || !isRetryResponse(body)) {
+          setCardError(cardId, cardErrorMessage(body));
+          return;
+        }
+
+        setCards((current) =>
+          current.map((item) =>
+            item.id === cardId
+              ? {
+                  ...item,
+                  text: body.text,
+                  history: body.history,
+                  dramaLevel: body.dramaLevel,
+                  status: "idle",
+                  error: undefined,
+                  copied: false,
+                }
+              : item,
+          ),
+        );
+      } catch (error) {
+        logApiExchange({ endpoint: "POST /api/retry", payload, startedAt, error });
+        setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+      }
+    },
+    [cards, setCardError],
+  );
+
+  const copyText = useCallback(
+    async (cardId: string, text: string) => {
+      try {
+        console.groupCollapsed(`[HypeForge V2 UI] copy requested ${cardId}`);
+        console.log("Copy text", text);
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(text);
+        } else {
+          fallbackCopy(text);
+        }
+        setCardCopied(cardId, true);
+        if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
+        copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
+        console.log("Copy succeeded");
+        console.groupEnd();
+      } catch {
+        try {
+          fallbackCopy(text);
+          setCardCopied(cardId, true);
+          if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
+          copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
+          console.log("Fallback copy succeeded");
+          console.groupEnd();
+        } catch (error) {
+          console.error("Copy failed", error);
+          console.groupEnd();
+          setCardError(cardId, "Copy didn't take - select the text and copy manually.");
+        }
+      }
+    },
+    [setCardCopied, setCardError],
+  );
+
+  return (
+    <main className="v2-shell min-h-dvh">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#08070b]/80 backdrop-blur-xl">
+        <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="grid size-10 shrink-0 place-items-center rounded-[14px] border border-white/10 bg-white/[0.04]">
+              <Sparkles aria-hidden="true" className="size-5 text-[var(--coral)]" />
+            </div>
+            <div className="min-w-0">
+              <p className="v2-gradient-text v2-display text-xl font-semibold">HypeForge</p>
+              <p className="v2-mono hidden text-[0.68rem] uppercase text-[var(--text-faint)] sm:block">
+                AI Compliment Generator
+              </p>
+            </div>
+          </div>
+          <p className="v2-mono text-right text-[0.68rem] uppercase text-[var(--text-muted)]">
+            No sign-in · no saved profiles
+          </p>
+        </div>
+      </header>
+
+      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[430px_minmax(0,1fr)] lg:px-8 lg:py-10">
+        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/25 sm:p-6">
+          <p className="v2-mono text-[0.68rem] uppercase text-[var(--cyan)]">AI Compliment Generator</p>
+          <h1 className="v2-display mt-4 text-4xl font-semibold leading-none text-[var(--text)] md:text-5xl">
+            Turn any person into a <span className="v2-gradient-text">living legend.</span>
+          </h1>
+          <p className="mt-4 text-sm font-medium leading-6 text-[var(--text-muted)]">
+            Type a job title or a few details. HypeForge returns three unreasonably generous compliments, each with
+            its own flavor of dramatic chaos.
+          </p>
+
+          <form
+            className="mt-6 space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              generate();
+            }}
+          >
+            <div className="space-y-2">
+              <label className="v2-mono text-[0.68rem] uppercase text-[var(--text-muted)]" htmlFor="v2-subject">
+                Who are we hyping?
+              </label>
+              <textarea
+                className="min-h-28 w-full resize-none rounded-[24px] border border-white/10 bg-[#121016] px-4 py-4 text-base font-semibold leading-7 text-[var(--text)] outline-none transition placeholder:text-[var(--text-faint)] focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
+                id="v2-subject"
+                maxLength={MAX_INPUT_LENGTH}
+                placeholder="e.g. Customer Success Manager, Recruiter, or my friend Sara who fixes every crisis"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+                    event.preventDefault();
+                    generate();
+                  }
+                }}
+              />
+              <div className="flex items-center justify-between gap-3 text-xs font-bold text-[var(--text-faint)]">
+                <span>Three voices. One click. Maximum admiration.</span>
+                <span>
+                  {input.length}/{MAX_INPUT_LENGTH}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {EXAMPLES.map((example) => (
+                <button
+                  className="min-h-10 rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[#8b5cf6]/70 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:text-sm"
+                  key={example}
+                  type="button"
+                  onClick={() => setInput(example)}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
+
+            <button
+              className="v2-gradient-button inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[14px] px-5 py-3 text-base font-bold text-white shadow-lg shadow-[#ff6b5f]/20 transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:grayscale focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+              disabled={!canGenerate || isGenerating}
+              type="submit"
+            >
+              {isGenerating ? (
+                <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
+              ) : (
+                <WandSparkles aria-hidden="true" className="size-5" />
+              )}
+              {!trimmedInput ? "Add someone to hype first" : isGenerating ? "Forging admiration..." : "Forge 3 compliments"}
+            </button>
+          </form>
+        </section>
+
+        <section className="min-w-0 space-y-5" aria-live="polite">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Compliment deck</p>
+              <h2 className="v2-display mt-1 text-3xl font-semibold text-[var(--text)]">Three dramatic voices</h2>
+              <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[var(--text-muted)]">
+                Each card keeps its own memory. Escalate one without changing the others.
+              </p>
+            </div>
+            {cards.length > 0 ? (
+              <button
+                className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                type="button"
+                onClick={() => {
+                  setCards([]);
+                  setGlobalError(null);
+                }}
+              >
+                <RotateCcw aria-hidden="true" className="size-4" />
+                Start over
+              </button>
+            ) : null}
+          </div>
+
+          {globalError ? (
+            <div className="flex items-start gap-3 rounded-[18px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 p-4 text-sm font-bold text-[var(--text)]">
+              <AlertTriangle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-[var(--coral)]" />
+              <p className="min-w-0 flex-1">{globalError}</p>
+              <button
+                className="rounded-[12px] border border-white/10 px-3 py-1 text-xs uppercase text-[var(--text-muted)] hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                type="button"
+                onClick={() => {
+                  setGlobalError(null);
+                  if (trimmedInput) generate();
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          ) : null}
+
+          {isGenerating && cards.length === 0 ? <LoadingPreview /> : null}
+
+          {cards.length > 0 ? (
+            <div className="grid gap-4 lg:grid-cols-3">
+              {cards.map((card, index) => (
+                <V2Card
+                  card={card}
+                  index={index}
+                  key={card.id}
+                  onCopy={copyText}
+                  onEscalate={escalate}
+                  onRetry={retryCard}
+                />
+              ))}
+            </div>
+          ) : !isGenerating ? (
+            <EmptyPreview />
+          ) : null}
+        </section>
+      </section>
+
+      <ProofStrip />
+
+      <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm font-semibold text-[var(--text-faint)] sm:px-6 lg:px-8">
+        <p className="v2-gradient-text v2-display text-lg font-semibold">HypeForge</p>
+        <p>Built for playful praise. No account needed.</p>
+      </footer>
+    </main>
+  );
+}

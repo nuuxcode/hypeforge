@@ -13,6 +13,7 @@ TBD
 - "Make it more dramatic" escalates only the selected card, using its own prior versions
 - Copy to clipboard with per-card confirmation and fallback copy support
 - Intentional loading, friendly errors, and mobile-first layout
+- `/v2` alternate UI using the premium drama-meter design system
 
 ## Tech Stack
 

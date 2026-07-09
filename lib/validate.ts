@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const MIN_INPUT_LENGTH = 3;
-export const MAX_INPUT_LENGTH = 180;
+export const MAX_INPUT_LENGTH = 360;
 export const MAX_HISTORY_ITEMS = 10;
 
 const INJECTION_PATTERNS = [
@@ -22,6 +22,11 @@ export const EscalateBodySchema = z.object({
   currentText: z.string().min(1).max(900),
   history: z.array(z.string().min(1).max(900)).min(1).max(MAX_HISTORY_ITEMS),
   dramaLevel: z.number().int().min(1).max(20),
+});
+
+export const RetryBodySchema = z.object({
+  personaId: z.string().min(1),
+  originalInput: z.string(),
 });
 
 export function sanitizeInput(value: string): string {
