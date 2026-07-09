@@ -84,6 +84,8 @@ function logApiExchange(args: {
   const requestId = debug?.requestId ?? "no-request-id";
   const statusLabel = args.status ? `${args.status}` : "network-error";
   const okLabel = args.ok ? "ok" : "failed";
+  const providerFailures =
+    debug?.events.filter((event) => event.scope === "provider" && event.level === "error") ?? [];
 
   console.groupCollapsed(`[HypeForge API] ${args.endpoint} ${statusLabel} ${okLabel} ${requestId} ${elapsedMs}ms`);
   console.log("Request payload", args.payload);
@@ -104,6 +106,15 @@ function logApiExchange(args: {
   }
   if (!args.ok) console.warn("Handled API failure", { status: args.status, body: args.body, error: args.error });
   console.groupEnd();
+
+  // Keep raw-but-redacted Gemini failures visible without expanding the request group.
+  for (const event of providerFailures) {
+    console.error(`[HypeForge Gemini] ${event.message}`, {
+      requestId,
+      route: debug?.route,
+      details: event.details,
+    });
+  }
 }
 
 function fallbackCopy(text: string): void {
