@@ -1,6 +1,7 @@
-import { generateComplimentDeck, providerErrorMessage } from "@/lib/ai";
+import { generateCompliment, providerErrorMessage } from "@/lib/ai";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { pickOnePerBucket } from "@/lib/personas";
+import { buildInitialMessages } from "@/lib/prompts";
 import { checkAndIncrement } from "@/lib/rateLimit";
 import type { ComplimentCard, Persona } from "@/lib/types";
 import { GenerateBodySchema, sanitizeInput } from "@/lib/validate";
@@ -20,6 +21,53 @@ function cookieHeader(value: string): string {
   return `${COOKIE_NAME}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`;
 }
 
+async function generateForPersona(
+  persona: Persona,
+  input: string,
+  debug: ReturnType<typeof createApiDebug>,
+): Promise<string> {
+  const messages = buildInitialMessages(persona, input);
+  debug.providerInfo("persona generation started", {
+    personaId: persona.id,
+    personaName: persona.name,
+  });
+  try {
+    const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 260 });
+    debug.providerInfo("persona generation succeeded", {
+      personaId: persona.id,
+      personaName: persona.name,
+      characterCount: text.length,
+    });
+    return text;
+  } catch (error) {
+    debug.providerError("persona generation failed", {
+      personaId: persona.id,
+      personaName: persona.name,
+      error,
+    });
+    debug.providerInfo("retrying persona generation once", {
+      personaId: persona.id,
+      personaName: persona.name,
+    });
+    try {
+      const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 260 });
+      debug.providerInfo("persona retry succeeded", {
+        personaId: persona.id,
+        personaName: persona.name,
+        characterCount: text.length,
+      });
+      return text;
+    } catch (retryError) {
+      debug.providerError("persona retry failed", {
+        personaId: persona.id,
+        personaName: persona.name,
+        error: retryError,
+      });
+      throw retryError;
+    }
+  }
+}
+
 function makeCard(persona: Persona, input: string, text: string): ComplimentCard {
   return {
     id: crypto.randomUUID(),
@@ -31,6 +79,21 @@ function makeCard(persona: Persona, input: string, text: string): ComplimentCard
     dramaLevel: 1,
     status: "idle",
     copied: false,
+  };
+}
+
+function makeFailedCard(persona: Persona, input: string): ComplimentCard {
+  return {
+    id: crypto.randomUUID(),
+    originalInput: input,
+    personaId: persona.id,
+    personaName: persona.name,
+    text: "",
+    history: [],
+    dramaLevel: 1,
+    status: "error",
+    copied: false,
+    error: "The compliment engine got overwhelmed by your brilliance. Try again.",
   };
 }
 
@@ -93,29 +156,28 @@ export async function POST(req: Request) {
     bucket: persona.bucket,
   })));
 
-  let deck: Record<string, string>;
-  try {
-    debug.providerInfo("deck generation started", {
-      personaIds: selected.map((persona) => persona.id),
-    });
-    deck = await generateComplimentDeck(selected, input, { temperature: 1, maxOutputTokens: 900 });
-    debug.providerInfo("deck generation succeeded", {
-      personaIds: selected.map((persona) => persona.id),
-      characterCounts: selected.map((persona) => deck[persona.id]?.length ?? 0),
-    });
-  } catch (error) {
-    debug.providerError("deck generation failed", error);
+  const settled = await Promise.allSettled(
+    selected.map(async (persona) => makeCard(persona, input, await generateForPersona(persona, input, debug))),
+  );
+
+  const cards = settled.map((result, index) =>
+    result.status === "fulfilled" ? result.value : makeFailedCard(selected[index]!, input),
+  );
+  debug.info("persona settlement complete", {
+    successCount: cards.filter((card) => card.status === "idle").length,
+    errorCount: cards.filter((card) => card.status === "error").length,
+  });
+
+  if (cards.every((card) => card.status === "error")) {
+    debug.error("all personas failed", settled.map((result, index) => ({
+      personaId: selected[index]?.id,
+      reason: result.status === "rejected" ? result.reason : undefined,
+    })));
     return Response.json(
-      withDebug({ ok: false, error: providerErrorMessage(error) }, debug.finish()),
+      withDebug({ ok: false, error: providerErrorMessage(settled[0]?.status === "rejected" ? settled[0].reason : undefined), cards }, debug.finish()),
       { headers: { "Set-Cookie": setCookie } },
     );
   }
-
-  const cards = selected.map((persona) => makeCard(persona, input, deck[persona.id]!));
-  debug.info("persona settlement complete", {
-    successCount: cards.length,
-    errorCount: 0,
-  });
 
   return Response.json(
     withDebug({ ok: true, cards }, debug.finish()),
