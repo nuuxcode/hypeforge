@@ -1,6 +1,5 @@
-import { generateCompliment } from "@/lib/ai";
+import { generateCompliment, providerErrorMessage } from "@/lib/ai";
 import { createApiDebug, withDebug } from "@/lib/debug";
-import { escalateLocalCompliment } from "@/lib/localCompliments";
 import { getPersona } from "@/lib/personas";
 import { buildEscalationMessages } from "@/lib/prompts";
 import { checkAndIncrement } from "@/lib/rateLimit";
@@ -152,41 +151,8 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     debug.providerError("escalation generation failed", error);
-    try {
-      const text = escalateLocalCompliment({
-        persona,
-        originalInput,
-        currentText,
-        dramaLevel: body.data.dramaLevel,
-      });
-      debug.providerInfo("local escalation fallback generated", {
-        personaId: persona.id,
-        personaName: persona.name,
-        characterCount: text.length,
-      });
-      return Response.json(
-        withDebug(
-          {
-            ok: true,
-            text,
-            history: [...history, text],
-            dramaLevel: body.data.dramaLevel + 1,
-          },
-          debug.finish(),
-        ),
-        {
-          headers: {
-            "Set-Cookie": setCookie,
-            "X-RateLimit-Remaining": String(rl.remaining),
-            "X-RateLimit-Reset": String(rl.resetAt),
-          },
-        },
-      );
-    } catch (fallbackError) {
-      debug.providerError("local escalation fallback failed", fallbackError);
-    }
     return Response.json(
-      withDebug({ ok: false, error: "The compliment engine got overwhelmed by your brilliance. Try again." }, debug.finish()),
+      withDebug({ ok: false, error: providerErrorMessage(error) }, debug.finish()),
       { headers: { "Set-Cookie": setCookie } },
     );
   }

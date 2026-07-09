@@ -1,9 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/generate/route";
-import { generateCompliment } from "@/lib/ai";
+import { generateComplimentDeck } from "@/lib/ai";
 
 vi.mock("@/lib/ai", () => ({
-  generateCompliment: vi.fn(async () => "This person is a blazing comet of competence with excellent timing."),
+  generateComplimentDeck: vi.fn(async (personas: Array<{ id: string; name: string }>) =>
+    Object.fromEntries(
+      personas.map((persona) => [
+        persona.id,
+        `${persona.name} declares this person a blazing comet of competence with excellent timing.`,
+      ]),
+    ),
+  ),
+  providerErrorMessage: (error: unknown) =>
+    error instanceof Error && /quota/i.test(error.message)
+      ? "Gemini quota is exhausted right now. HypeForge is LLM-only, so add billing, wait for quota reset, or update GEMINI_API_KEY."
+      : "The LLM provider failed. Open the console for the real provider error.",
 }));
 
 describe("POST /api/generate", () => {
@@ -33,7 +44,7 @@ describe("POST /api/generate", () => {
     expect(body.cards[0].history).toHaveLength(1);
     expect(body.debug.requestId).toEqual(expect.any(String));
     expect(body.debug.events.some((event: { message: string }) => event.message === "selected personas")).toBe(true);
-    expect(generateCompliment).toHaveBeenCalledTimes(3);
+    expect(generateComplimentDeck).toHaveBeenCalledTimes(1);
   });
 
   it("rejects invalid input before model calls", async () => {
@@ -51,11 +62,11 @@ describe("POST /api/generate", () => {
     expect(body.debug.events.some((event: { message: string }) => event.message === "input sanitization failed")).toBe(
       true,
     );
-    expect(generateCompliment).not.toHaveBeenCalled();
+    expect(generateComplimentDeck).not.toHaveBeenCalled();
   });
 
-  it("falls back to local compliments and returns backend debug details when provider calls fail", async () => {
-    vi.mocked(generateCompliment).mockRejectedValue(new Error("quota exceeded for gemini-2.5-flash"));
+  it("returns backend debug details when the LLM provider fails", async () => {
+    vi.mocked(generateComplimentDeck).mockRejectedValue(new Error("quota exceeded for gemini-2.5-flash"));
 
     const response = await POST(
       new Request("http://localhost/api/generate", {
@@ -66,17 +77,10 @@ describe("POST /api/generate", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(body.ok).toBe(true);
-    expect(body.cards).toHaveLength(3);
-    expect(body.cards.every((card: { status: string; text: string }) => card.status === "idle" && card.text.length > 0)).toBe(
-      true,
-    );
-    expect(body.debug.events.some((event: { message: string }) => event.message === "persona generation failed")).toBe(
-      true,
-    );
-    expect(body.debug.events.some((event: { message: string }) => event.message === "local compliment fallback generated")).toBe(
-      true,
-    );
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("Gemini quota is exhausted");
+    expect(body.cards).toBeUndefined();
+    expect(body.debug.events.some((event: { message: string }) => event.message === "deck generation failed")).toBe(true);
     expect(JSON.stringify(body.debug)).toContain("quota exceeded");
   });
 });

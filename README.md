@@ -16,7 +16,7 @@ TBD
 
 ## Tech Stack
 
-Next.js App Router, TypeScript, Tailwind CSS, server API routes, Vercel AI SDK, Gemini via `@ai-sdk/google`, and a no-database HMAC cookie rate limit.
+Next.js App Router, TypeScript, Tailwind CSS, server API routes, Vercel AI SDK, Gemini via `@ai-sdk/google`, optional OpenAI fallback via `@ai-sdk/openai`, and a no-database HMAC cookie rate limit.
 
 ## Prompt Design
 
@@ -32,7 +32,7 @@ Each card stores the current text, public compliment history, persona id, drama 
 cp .env.example .env.local
 ```
 
-Set `GEMINI_API_KEY` and `RATELIMIT_SECRET`. Keep `.env.local` out of git.
+Set `GEMINI_API_KEY` and `RATELIMIT_SECRET`. If Gemini quota is exhausted, set `OPENAI_API_KEY` as a second real LLM provider. Keep `.env.local` out of git.
 
 ## Run Locally
 
