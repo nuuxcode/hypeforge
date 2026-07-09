@@ -22,19 +22,38 @@ export type ComplimentCard = {
   error?: string;
 };
 
+export type ApiDebugEvent = {
+  timestamp: string;
+  level: "info" | "warn" | "error";
+  scope: "api" | "provider" | "client";
+  message: string;
+  details?: unknown;
+};
+
+export type ApiDebug = {
+  requestId: string;
+  route: string;
+  startedAt: string;
+  elapsedMs?: number;
+  events: ApiDebugEvent[];
+};
+
 export type GenerateResponse = {
   cards: ComplimentCard[];
+  debug?: ApiDebug;
 };
 
 export type EscalateResponse = {
   text: string;
   history: string[];
   dramaLevel: number;
+  debug?: ApiDebug;
 };
 
 export type ApiErrorResponse = {
   error: string;
   resetAt?: number;
+  debug?: ApiDebug;
 };
 
 export type RateLimitState = {

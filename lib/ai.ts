@@ -35,6 +35,29 @@ function splitSystemMessages(messages: ModelMessage[]): {
   };
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function combinedModelError(args: {
+  mainModel: string;
+  mainError: unknown;
+  backupModel?: string;
+  backupError?: unknown;
+}) {
+  const message = args.backupError
+    ? `Main model ${args.mainModel} failed: ${errorMessage(args.mainError)}; backup model ${args.backupModel} failed: ${errorMessage(args.backupError)}`
+    : `Model ${args.mainModel} failed: ${errorMessage(args.mainError)}`;
+  const error = new Error(message);
+  Object.assign(error, {
+    mainModel: args.mainModel,
+    mainError: errorMessage(args.mainError),
+    backupModel: args.backupModel,
+    backupError: args.backupError ? errorMessage(args.backupError) : undefined,
+  });
+  return error;
+}
+
 export async function generateCompliment(
   messages: ModelMessage[],
   options: { temperature?: number; maxOutputTokens?: number } = {},
@@ -69,7 +92,16 @@ export async function generateCompliment(
     return await tryModel(main);
   } catch (error) {
     console.error("[main-compliment-model]", (error as Error).message);
-    if (main === backup) throw error;
-    return tryModel(backup);
+    if (main === backup) throw combinedModelError({ mainModel: main, mainError: error });
+    try {
+      return await tryModel(backup);
+    } catch (backupError) {
+      throw combinedModelError({
+        mainModel: main,
+        mainError: error,
+        backupModel: backup,
+        backupError,
+      });
+    }
   }
 }

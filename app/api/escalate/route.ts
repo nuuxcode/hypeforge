@@ -1,4 +1,5 @@
 import { generateCompliment } from "@/lib/ai";
+import { createApiDebug, withDebug } from "@/lib/debug";
 import { getPersona } from "@/lib/personas";
 import { buildEscalationMessages } from "@/lib/prompts";
 import { checkAndIncrement } from "@/lib/rateLimit";
@@ -21,48 +22,67 @@ function cookieHeader(value: string): string {
 }
 
 export async function POST(req: Request) {
+  const debug = createApiDebug("POST /api/escalate");
+  debug.info("request received");
+
   let parsed: unknown;
   try {
     parsed = await req.json();
   } catch {
-    return Response.json({ error: "Invalid request body." }, { status: 400 });
+    debug.error("request body was not valid JSON");
+    return Response.json(withDebug({ error: "Invalid request body." }, debug.finish()), { status: 400 });
   }
 
   const body = EscalateBodySchema.safeParse(parsed);
   if (!body.success) {
-    return Response.json({ error: "Invalid request body." }, { status: 400 });
+    debug.error("request body failed schema validation", body.error.flatten());
+    return Response.json(withDebug({ error: "Invalid request body." }, debug.finish()), { status: 400 });
   }
+  debug.info("request body parsed", {
+    personaId: body.data.personaId,
+    originalInputLength: body.data.originalInput.length,
+    historyCount: body.data.history.length,
+    dramaLevel: body.data.dramaLevel,
+  });
 
   let rl;
   try {
     rl = checkAndIncrement(getCookie(req, COOKIE_NAME));
   } catch (error) {
-    console.error("[rate-limit]", (error as Error).message);
-    return Response.json({ error: "Server configuration is missing." }, { status: 500 });
+    debug.error("rate-limit configuration failed", error);
+    return Response.json(withDebug({ error: "Server configuration is missing." }, debug.finish()), { status: 500 });
   }
 
   const setCookie = cookieHeader(rl.newCookie);
   if (!rl.ok) {
+    debug.warn("request blocked by rate limit", { resetAt: rl.resetAt });
     return Response.json(
-      { error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rl.resetAt },
+      withDebug(
+        { error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rl.resetAt },
+        debug.finish(),
+      ),
       { status: 429, headers: { "Set-Cookie": setCookie } },
     );
   }
+  debug.info("rate-limit passed", { remaining: rl.remaining, resetAt: rl.resetAt });
 
   const persona = getPersona(body.data.personaId);
   if (!persona) {
+    debug.error("unknown persona requested", { personaId: body.data.personaId });
     return Response.json(
-      { error: "Invalid compliment persona." },
+      withDebug({ error: "Invalid compliment persona." }, debug.finish()),
       { status: 400, headers: { "Set-Cookie": setCookie } },
     );
   }
+  debug.info("persona resolved", { personaId: persona.id, personaName: persona.name });
 
   let originalInput: string;
   try {
     originalInput = sanitizeInput(body.data.originalInput);
   } catch (error) {
+    debug.error("original input sanitization failed", error);
     return Response.json(
-      { error: (error as Error).message },
+      withDebug({ error: (error as Error).message }, debug.finish()),
       { status: 400, headers: { "Set-Cookie": setCookie } },
     );
   }
@@ -72,13 +92,29 @@ export async function POST(req: Request) {
   try {
     validateCompliment(currentText);
   } catch {
+    debug.error("current compliment failed validation before escalation", {
+      currentTextLength: currentText.length,
+      historyCount: history.length,
+    });
     return Response.json(
-      { error: "The current compliment is too chaotic to escalate. Try generating again." },
+      withDebug(
+        { error: "The current compliment is too chaotic to escalate. Try generating again." },
+        debug.finish(),
+      ),
       { status: 400, headers: { "Set-Cookie": setCookie } },
     );
   }
+  debug.info("escalation prompt inputs prepared", {
+    currentTextLength: currentText.length,
+    historyCount: history.length,
+  });
 
   try {
+    debug.providerInfo("escalation generation started", {
+      personaId: persona.id,
+      personaName: persona.name,
+      dramaLevel: body.data.dramaLevel,
+    });
     const text = await generateCompliment(
       buildEscalationMessages({
         persona,
@@ -89,13 +125,21 @@ export async function POST(req: Request) {
       }),
       { temperature: 1.05, maxOutputTokens: 280 },
     );
+    debug.providerInfo("escalation generation succeeded", {
+      personaId: persona.id,
+      personaName: persona.name,
+      characterCount: text.length,
+    });
 
     return Response.json(
-      {
-        text,
-        history: [...history, text],
-        dramaLevel: body.data.dramaLevel + 1,
-      },
+      withDebug(
+        {
+          text,
+          history: [...history, text],
+          dramaLevel: body.data.dramaLevel + 1,
+        },
+        debug.finish(),
+      ),
       {
         headers: {
           "Set-Cookie": setCookie,
@@ -105,9 +149,9 @@ export async function POST(req: Request) {
       },
     );
   } catch (error) {
-    console.error("[escalate]", (error as Error).message);
+    debug.providerError("escalation generation failed", error);
     return Response.json(
-      { error: "The compliment engine got overwhelmed by your brilliance. Try again." },
+      withDebug({ error: "The compliment engine got overwhelmed by your brilliance. Try again." }, debug.finish()),
       { status: 502, headers: { "Set-Cookie": setCookie } },
     );
   }

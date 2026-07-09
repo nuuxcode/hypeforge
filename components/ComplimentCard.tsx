@@ -70,35 +70,40 @@ export function ComplimentCard({ card, onCopy, onEscalate }: ComplimentCardProps
           ) : null}
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-          <button
-            className="flex min-h-11 items-center justify-center gap-2 rounded-[8px] border-2 border-neutral-950 bg-[#f7c948] px-3 py-2 text-sm font-black text-neutral-950 transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-neutral-200 focus:outline-none focus:ring-4 focus:ring-[#db5b2a]/30"
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onEscalate(card.id)}
-          >
-            {isLoading ? (
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-            ) : (
-              <WandSparkles aria-hidden="true" className="size-4" />
-            )}
-            {dramaButtonLabel(card.dramaLevel)}
-          </button>
-          <button
-            aria-label={`Copy ${card.personaName} compliment`}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-[8px] border-2 border-neutral-950 bg-white px-3 py-2 text-sm font-black text-neutral-950 transition hover:-translate-y-0.5 hover:bg-[#eaf4ef] disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-neutral-100 focus:outline-none focus:ring-4 focus:ring-[#2f5d50]/30"
-            disabled={!hasText}
-            type="button"
-            onClick={() => onCopy(card.id, card.text)}
-          >
-            {card.copied ? (
-              <Check aria-hidden="true" className="size-4 text-[#2f5d50]" />
-            ) : (
-              <Copy aria-hidden="true" className="size-4" />
-            )}
-            {card.copied ? "Copied!" : "Copy"}
-          </button>
-        </div>
+        {hasText ? (
+          <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+            <button
+              className="flex min-h-11 items-center justify-center gap-2 rounded-[8px] border-2 border-neutral-950 bg-[#f7c948] px-3 py-2 text-sm font-black text-neutral-950 transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-neutral-200 focus:outline-none focus:ring-4 focus:ring-[#db5b2a]/30"
+              disabled={isLoading}
+              type="button"
+              onClick={() => onEscalate(card.id)}
+            >
+              {isLoading ? (
+                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : (
+                <WandSparkles aria-hidden="true" className="size-4" />
+              )}
+              {dramaButtonLabel(card.dramaLevel)}
+            </button>
+            <button
+              aria-label={`Copy ${card.personaName} compliment`}
+              className="flex min-h-11 items-center justify-center gap-2 rounded-[8px] border-2 border-neutral-950 bg-white px-3 py-2 text-sm font-black text-neutral-950 transition hover:-translate-y-0.5 hover:bg-[#eaf4ef] focus:outline-none focus:ring-4 focus:ring-[#2f5d50]/30"
+              type="button"
+              onClick={() => onCopy(card.id, card.text)}
+            >
+              {card.copied ? (
+                <Check aria-hidden="true" className="size-4 text-[#2f5d50]" />
+              ) : (
+                <Copy aria-hidden="true" className="size-4" />
+              )}
+              {card.copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        ) : (
+          <div className="rounded-[8px] border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-bold leading-6 text-neutral-600">
+            This persona did not produce a usable compliment. Try the full deck again from the input panel.
+          </div>
+        )}
       </div>
     </article>
   );

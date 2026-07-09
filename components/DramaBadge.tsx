@@ -11,7 +11,7 @@ function labelForLevel(level: number): string {
 
 export function DramaBadge({ level }: DramaBadgeProps) {
   return (
-    <span className="inline-flex h-8 items-center rounded-full border border-neutral-950 bg-[#f7c948] px-3 text-xs font-black uppercase text-neutral-950">
+    <span className="inline-flex h-8 items-center whitespace-nowrap rounded-full border border-neutral-950 bg-[#f7c948] px-3 text-xs font-black uppercase text-neutral-950">
       {labelForLevel(level)}
     </span>
   );

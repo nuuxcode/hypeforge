@@ -6,7 +6,13 @@ import { ComplimentCard } from "@/components/ComplimentCard";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { InputPanel } from "@/components/InputPanel";
 import { LoadingState } from "@/components/LoadingState";
-import type { ApiErrorResponse, ComplimentCard as ComplimentCardType, EscalateResponse, GenerateResponse } from "@/lib/types";
+import type {
+  ApiDebug,
+  ApiErrorResponse,
+  ComplimentCard as ComplimentCardType,
+  EscalateResponse,
+  GenerateResponse,
+} from "@/lib/types";
 import { MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
 
 const EXAMPLES = [
@@ -39,6 +45,53 @@ function errorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function getDebug(value: unknown): ApiDebug | undefined {
+  if (value && typeof value === "object" && "debug" in value) {
+    return (value as { debug?: ApiDebug }).debug;
+  }
+  return undefined;
+}
+
+function hasVisibleCards(value: unknown): value is GenerateResponse {
+  return isGenerateResponse(value) && value.cards.some((card) => card.text.trim().length > 0);
+}
+
+function logApiExchange(args: {
+  endpoint: string;
+  payload: unknown;
+  status?: number;
+  ok?: boolean;
+  body?: unknown;
+  startedAt: number;
+  error?: unknown;
+}) {
+  const elapsedMs = Math.round(performance.now() - args.startedAt);
+  const debug = getDebug(args.body);
+  const requestId = debug?.requestId ?? "no-request-id";
+  const statusLabel = args.status ? `${args.status}` : "network-error";
+  const okLabel = args.ok ? "ok" : "failed";
+
+  console.groupCollapsed(`[HypeForge API] ${args.endpoint} ${statusLabel} ${okLabel} ${requestId} ${elapsedMs}ms`);
+  console.log("Request payload", args.payload);
+  if (args.body !== undefined) console.log("Response body", args.body);
+  if (args.error) console.error("Network/client error", args.error);
+  if (debug) {
+    console.log("Server debug", debug);
+    console.table(
+      debug.events.map((event) => ({
+        time: event.timestamp,
+        level: event.level,
+        scope: event.scope,
+        message: event.message,
+      })),
+    );
+  } else {
+    console.warn("No server debug payload was returned. In production this is expected unless HYPEFORGE_DEBUG=true.");
+  }
+  if (!args.ok) console.error("API call failed", { status: args.status, body: args.body, error: args.error });
+  console.groupEnd();
+}
+
 function fallbackCopy(text: string): void {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -66,6 +119,9 @@ export default function Page() {
   );
 
   useEffect(() => {
+    console.info("[HypeForge UI] mounted", {
+      debugTip: "API calls log grouped request/response/server-debug entries here in development.",
+    });
     const timers = copyTimers.current;
     return () => {
       Object.values(timers).forEach((timer) => clearTimeout(timer));
@@ -97,16 +153,26 @@ export default function Page() {
     setGlobalError(null);
     setCards([]);
 
+    const payload = { input: trimmedInput };
+    const startedAt = performance.now();
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ input: trimmedInput }),
+        body: JSON.stringify(payload),
       });
       const body = (await response.json().catch(() => ({}))) as unknown;
+      logApiExchange({
+        endpoint: "POST /api/generate",
+        payload,
+        status: response.status,
+        ok: response.ok,
+        body,
+        startedAt,
+      });
 
       if (!response.ok) {
-        if (isGenerateResponse(body)) setCards(body.cards);
+        setCards(hasVisibleCards(body) ? body.cards : []);
         setGlobalError(errorMessage(body, "The compliment engine got overwhelmed by your brilliance. Try again."));
         return;
       }
@@ -117,7 +183,16 @@ export default function Page() {
       }
 
       setCards(body.cards);
-    } catch {
+      if (body.cards.some((card) => card.status === "error")) {
+        console.warn("[HypeForge UI] partial generation result", body.cards);
+      }
+    } catch (error) {
+      logApiExchange({
+        endpoint: "POST /api/generate",
+        payload,
+        startedAt,
+        error,
+      });
       setGlobalError("Network error. Check your connection and retry.");
     } finally {
       setIsGenerating(false);
@@ -133,19 +208,29 @@ export default function Page() {
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
 
+      const payload = {
+        personaId: card.personaId,
+        originalInput: card.originalInput,
+        currentText: card.text,
+        history: card.history,
+        dramaLevel: card.dramaLevel,
+      };
+      const startedAt = performance.now();
       try {
         const response = await fetch("/api/escalate", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            personaId: card.personaId,
-            originalInput: card.originalInput,
-            currentText: card.text,
-            history: card.history,
-            dramaLevel: card.dramaLevel,
-          }),
+          body: JSON.stringify(payload),
         });
         const body = (await response.json().catch(() => ({}))) as unknown;
+        logApiExchange({
+          endpoint: "POST /api/escalate",
+          payload,
+          status: response.status,
+          ok: response.ok,
+          body,
+          startedAt,
+        });
 
         if (!response.ok || !isEscalateResponse(body)) {
           setCardError(cardId, errorMessage(body, "The compliment engine got overwhelmed by your brilliance. Try again."));
@@ -167,7 +252,13 @@ export default function Page() {
               : item,
           ),
         );
-      } catch {
+      } catch (error) {
+        logApiExchange({
+          endpoint: "POST /api/escalate",
+          payload,
+          startedAt,
+          error,
+        });
         setCardError(cardId, "Network error. Check your connection and retry.");
       }
     },
@@ -177,6 +268,8 @@ export default function Page() {
   const copyText = useCallback(
     async (cardId: string, text: string) => {
       try {
+        console.groupCollapsed(`[HypeForge UI] copy requested ${cardId}`);
+        console.log("Copy text", text);
         if (navigator.clipboard?.writeText) {
           await navigator.clipboard.writeText(text);
         } else {
@@ -185,13 +278,19 @@ export default function Page() {
         setCardCopied(cardId, true);
         if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
         copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
+        console.log("Copy succeeded");
+        console.groupEnd();
       } catch {
         try {
           fallbackCopy(text);
           setCardCopied(cardId, true);
           if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
           copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
-        } catch {
+          console.log("Fallback copy succeeded");
+          console.groupEnd();
+        } catch (error) {
+          console.error("Copy failed", error);
+          console.groupEnd();
           setCardError(cardId, "Copy failed. You can still select the text manually.");
         }
       }
@@ -239,7 +338,7 @@ export default function Page() {
           {isGenerating && cards.length === 0 ? <LoadingState /> : null}
 
           {cards.length > 0 ? (
-            <div className="grid gap-4 xl:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
               {cards.map((card) => (
                 <ComplimentCard card={card} key={card.id} onCopy={copyText} onEscalate={escalate} />
               ))}
