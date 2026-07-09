@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "verify:api": "node scripts/verify-api-no-http-errors.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.79",

@@ -22,6 +22,7 @@ describe("POST /api/generate", () => {
     const body = await response.json();
 
     expect(response.status).toBe(200);
+    expect(body.ok).toBe(true);
     expect(body.cards).toHaveLength(3);
     expect(body.cards[0]).toMatchObject({
       originalInput: "Customer Success Manager",
@@ -44,7 +45,8 @@ describe("POST /api/generate", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(400);
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(false);
     expect(body.error).toContain("Give me a job title");
     expect(body.debug.events.some((event: { message: string }) => event.message === "input sanitization failed")).toBe(
       true,
@@ -63,7 +65,8 @@ describe("POST /api/generate", () => {
     );
     const body = await response.json();
 
-    expect(response.status).toBe(502);
+    expect(response.status).toBe(200);
+    expect(body.ok).toBe(false);
     expect(body.error).toContain("overwhelmed");
     expect(body.cards).toHaveLength(3);
     expect(body.debug.events.some((event: { message: string }) => event.message === "persona generation failed")).toBe(

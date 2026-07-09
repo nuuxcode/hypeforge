@@ -45,6 +45,15 @@ function errorMessage(value: unknown, fallback: string): string {
   return fallback;
 }
 
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      (value as ApiErrorResponse).ok === false &&
+      typeof (value as ApiErrorResponse).error === "string",
+  );
+}
+
 function getDebug(value: unknown): ApiDebug | undefined {
   if (value && typeof value === "object" && "debug" in value) {
     return (value as { debug?: ApiDebug }).debug;
@@ -52,8 +61,13 @@ function getDebug(value: unknown): ApiDebug | undefined {
   return undefined;
 }
 
-function hasVisibleCards(value: unknown): value is GenerateResponse {
-  return isGenerateResponse(value) && value.cards.some((card) => card.text.trim().length > 0);
+function hasVisibleCards(value: unknown): value is { cards: ComplimentCardType[] } {
+  return Boolean(
+    value &&
+      typeof value === "object" &&
+      Array.isArray((value as { cards?: unknown }).cards) &&
+      (value as { cards: ComplimentCardType[] }).cards.some((card) => card.text.trim().length > 0),
+  );
 }
 
 function logApiExchange(args: {
@@ -88,7 +102,7 @@ function logApiExchange(args: {
   } else {
     console.warn("No server debug payload was returned. In production this is expected unless HYPEFORGE_DEBUG=true.");
   }
-  if (!args.ok) console.error("API call failed", { status: args.status, body: args.body, error: args.error });
+  if (!args.ok) console.warn("Handled API failure", { status: args.status, body: args.body, error: args.error });
   console.groupEnd();
 }
 
@@ -166,10 +180,16 @@ export default function Page() {
         endpoint: "POST /api/generate",
         payload,
         status: response.status,
-        ok: response.ok,
+        ok: response.ok && !isApiErrorResponse(body),
         body,
         startedAt,
       });
+
+      if (isApiErrorResponse(body)) {
+        setCards(hasVisibleCards(body) ? body.cards : []);
+        setGlobalError(body.error);
+        return;
+      }
 
       if (!response.ok) {
         setCards(hasVisibleCards(body) ? body.cards : []);
@@ -227,10 +247,15 @@ export default function Page() {
           endpoint: "POST /api/escalate",
           payload,
           status: response.status,
-          ok: response.ok,
+          ok: response.ok && !isApiErrorResponse(body),
           body,
           startedAt,
         });
+
+        if (isApiErrorResponse(body)) {
+          setCardError(cardId, body.error);
+          return;
+        }
 
         if (!response.ok || !isEscalateResponse(body)) {
           setCardError(cardId, errorMessage(body, "The compliment engine got overwhelmed by your brilliance. Try again."));

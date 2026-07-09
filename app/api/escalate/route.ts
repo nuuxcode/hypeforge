@@ -58,10 +58,10 @@ export async function POST(req: Request) {
     debug.warn("request blocked by rate limit", { resetAt: rl.resetAt });
     return Response.json(
       withDebug(
-        { error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rl.resetAt },
+        { ok: false, error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rl.resetAt },
         debug.finish(),
       ),
-      { status: 429, headers: { "Set-Cookie": setCookie } },
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
   debug.info("rate-limit passed", { remaining: rl.remaining, resetAt: rl.resetAt });
@@ -70,8 +70,8 @@ export async function POST(req: Request) {
   if (!persona) {
     debug.error("unknown persona requested", { personaId: body.data.personaId });
     return Response.json(
-      withDebug({ error: "Invalid compliment persona." }, debug.finish()),
-      { status: 400, headers: { "Set-Cookie": setCookie } },
+      withDebug({ ok: false, error: "Invalid compliment persona." }, debug.finish()),
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
   debug.info("persona resolved", { personaId: persona.id, personaName: persona.name });
@@ -82,8 +82,8 @@ export async function POST(req: Request) {
   } catch (error) {
     debug.error("original input sanitization failed", error);
     return Response.json(
-      withDebug({ error: (error as Error).message }, debug.finish()),
-      { status: 400, headers: { "Set-Cookie": setCookie } },
+      withDebug({ ok: false, error: (error as Error).message }, debug.finish()),
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
 
@@ -98,10 +98,10 @@ export async function POST(req: Request) {
     });
     return Response.json(
       withDebug(
-        { error: "The current compliment is too chaotic to escalate. Try generating again." },
+        { ok: false, error: "The current compliment is too chaotic to escalate. Try generating again." },
         debug.finish(),
       ),
-      { status: 400, headers: { "Set-Cookie": setCookie } },
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
   debug.info("escalation prompt inputs prepared", {
@@ -134,6 +134,7 @@ export async function POST(req: Request) {
     return Response.json(
       withDebug(
         {
+          ok: true,
           text,
           history: [...history, text],
           dramaLevel: body.data.dramaLevel + 1,
@@ -151,8 +152,8 @@ export async function POST(req: Request) {
   } catch (error) {
     debug.providerError("escalation generation failed", error);
     return Response.json(
-      withDebug({ error: "The compliment engine got overwhelmed by your brilliance. Try again." }, debug.finish()),
-      { status: 502, headers: { "Set-Cookie": setCookie } },
+      withDebug({ ok: false, error: "The compliment engine got overwhelmed by your brilliance. Try again." }, debug.finish()),
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
 }

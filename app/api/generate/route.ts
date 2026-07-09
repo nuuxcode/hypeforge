@@ -136,10 +136,10 @@ export async function POST(req: Request) {
     debug.warn("request blocked by rate limit", { resetAt: rl.resetAt });
     return Response.json(
       withDebug(
-        { error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rl.resetAt },
+        { ok: false, error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rl.resetAt },
         debug.finish(),
       ),
-      { status: 429, headers: { "Set-Cookie": setCookie } },
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
   debug.info("rate-limit passed", { remaining: rl.remaining, resetAt: rl.resetAt });
@@ -150,8 +150,8 @@ export async function POST(req: Request) {
   } catch (error) {
     debug.error("input sanitization failed", error);
     return Response.json(
-      withDebug({ error: (error as Error).message }, debug.finish()),
-      { status: 400, headers: { "Set-Cookie": setCookie } },
+      withDebug({ ok: false, error: (error as Error).message }, debug.finish()),
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
   debug.info("input sanitized", { input });
@@ -180,13 +180,13 @@ export async function POST(req: Request) {
       reason: result.status === "rejected" ? result.reason : undefined,
     })));
     return Response.json(
-      withDebug({ error: "The compliment engine got overwhelmed by your brilliance. Try again.", cards }, debug.finish()),
-      { status: 502, headers: { "Set-Cookie": setCookie } },
+      withDebug({ ok: false, error: "The compliment engine got overwhelmed by your brilliance. Try again.", cards }, debug.finish()),
+      { headers: { "Set-Cookie": setCookie } },
     );
   }
 
   return Response.json(
-    withDebug({ cards }, debug.finish()),
+    withDebug({ ok: true, cards }, debug.finish()),
     {
       headers: {
         "Set-Cookie": setCookie,

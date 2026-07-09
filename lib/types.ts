@@ -39,11 +39,13 @@ export type ApiDebug = {
 };
 
 export type GenerateResponse = {
+  ok?: true;
   cards: ComplimentCard[];
   debug?: ApiDebug;
 };
 
 export type EscalateResponse = {
+  ok?: true;
   text: string;
   history: string[];
   dramaLevel: number;
@@ -51,8 +53,10 @@ export type EscalateResponse = {
 };
 
 export type ApiErrorResponse = {
+  ok: false;
   error: string;
   resetAt?: number;
+  cards?: ComplimentCard[];
   debug?: ApiDebug;
 };
 
