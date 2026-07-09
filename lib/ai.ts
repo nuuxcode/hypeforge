@@ -6,9 +6,11 @@ let googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
 
 function getGoogleClient() {
   if (googleClient) return googleClient;
-  const apiKey = process.env.GEMINI_API_KEY;
+  // HYPEFORGE_GEMINI_API_KEY wins so a GEMINI_API_KEY exported in the shell
+  // (e.g. ~/.zshrc) cannot shadow the key configured in .env.local.
+  const apiKey = process.env.HYPEFORGE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("GEMINI_API_KEY is not set.");
+    throw new Error("HYPEFORGE_GEMINI_API_KEY / GEMINI_API_KEY is not set.");
   }
   googleClient = createGoogleGenerativeAI({ apiKey });
   return googleClient;
@@ -37,6 +39,10 @@ function splitSystemMessages(messages: ModelMessage[]): {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+export function isQuotaError(error: unknown): boolean {
+  return /quota|RESOURCE_EXHAUSTED|429|rate.?limit/i.test(errorMessage(error));
 }
 
 export function providerErrorMessage(error: unknown): string {

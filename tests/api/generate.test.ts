@@ -4,6 +4,8 @@ import { generateCompliment } from "@/lib/ai";
 
 vi.mock("@/lib/ai", () => ({
   generateCompliment: vi.fn(async () => "This person is a blazing comet of competence with excellent timing."),
+  isQuotaError: (error: unknown) =>
+    error instanceof Error && /quota|RESOURCE_EXHAUSTED|429|rate.?limit/i.test(error.message),
   providerErrorMessage: (error: unknown) =>
     error instanceof Error && /No LLM API key/i.test(error.message)
       ? "Server configuration is missing."
@@ -73,11 +75,31 @@ describe("POST /api/generate", () => {
     expect(body.ok).toBe(false);
     expect(body.error).toContain("overwhelmed");
     expect(body.cards).toHaveLength(3);
-    expect(generateCompliment).toHaveBeenCalledTimes(6);
+    expect(generateCompliment).toHaveBeenCalledTimes(3);
     expect(body.debug.events.some((event: { message: string }) => event.message === "persona generation failed")).toBe(
       true,
     );
-    expect(body.debug.events.some((event: { message: string }) => event.message === "persona retry failed")).toBe(true);
+    expect(
+      body.debug.events.some(
+        (event: { message: string }) => event.message === "skipping retry: provider quota exhausted, retry would fail too",
+      ),
+    ).toBe(true);
     expect(JSON.stringify(body.debug)).toContain("quota exceeded");
+  });
+
+  it("retries once when the provider fails for a non-quota reason", async () => {
+    vi.mocked(generateCompliment).mockRejectedValue(new Error("Model output was truncated."));
+
+    const response = await POST(
+      new Request("http://localhost/api/generate", {
+        method: "POST",
+        body: JSON.stringify({ input: "Recruiter who never misses" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(body.ok).toBe(false);
+    expect(generateCompliment).toHaveBeenCalledTimes(6);
+    expect(body.debug.events.some((event: { message: string }) => event.message === "persona retry failed")).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { generateCompliment, providerErrorMessage } from "@/lib/ai";
+import { generateCompliment, isQuotaError, providerErrorMessage } from "@/lib/ai";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { pickOnePerBucket } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
@@ -45,6 +45,13 @@ async function generateForPersona(
       personaName: persona.name,
       error,
     });
+    if (isQuotaError(error)) {
+      debug.providerInfo("skipping retry: provider quota exhausted, retry would fail too", {
+        personaId: persona.id,
+        personaName: persona.name,
+      });
+      throw error;
+    }
     debug.providerInfo("retrying persona generation once", {
       personaId: persona.id,
       personaName: persona.name,
