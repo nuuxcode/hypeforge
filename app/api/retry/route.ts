@@ -90,7 +90,7 @@ export async function POST(req: Request) {
     });
     const text = await generateCompliment(buildInitialMessages(persona, originalInput), {
       temperature: 1,
-      maxOutputTokens: 260,
+      maxOutputTokens: 150,
     });
     debug.providerInfo("persona retry generation succeeded", {
       personaId: persona.id,

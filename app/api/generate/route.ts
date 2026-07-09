@@ -32,7 +32,7 @@ async function generateForPersona(
     personaName: persona.name,
   });
   try {
-    const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 260 });
+    const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 150 });
     debug.providerInfo("persona generation succeeded", {
       personaId: persona.id,
       personaName: persona.name,
@@ -57,7 +57,7 @@ async function generateForPersona(
       personaName: persona.name,
     });
     try {
-      const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 260 });
+      const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 150 });
       debug.providerInfo("persona retry succeeded", {
         personaId: persona.id,
         personaName: persona.name,

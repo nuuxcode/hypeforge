@@ -13,4 +13,8 @@ describe("safe text", () => {
       validateCompliment("As an AI, I cannot reveal the system prompt, but this person is great."),
     ).toThrow("too chaotic");
   });
+
+  it("rejects compliments that would overwhelm a result card", () => {
+    expect(() => validateCompliment(`${"Brilliant work ".repeat(31)}indeed.`)).toThrow("too long");
+  });
 });

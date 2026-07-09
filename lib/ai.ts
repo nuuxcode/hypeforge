@@ -17,7 +17,7 @@ function getGoogleClient() {
 }
 
 function getModelIds() {
-  const main = process.env.GEMINI_MODEL_MAIN ?? process.env.GEMINI_MODEL_BACKUP ?? "gemini-2.5-flash";
+  const main = process.env.GEMINI_MODEL_MAIN ?? process.env.GEMINI_MODEL_BACKUP ?? "gemini-3.1-flash-lite";
   const backup = process.env.GEMINI_MODEL_BACKUP ?? main;
   return { main, backup };
 }

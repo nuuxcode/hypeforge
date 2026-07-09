@@ -11,6 +11,7 @@ describe("prompts", () => {
 
     expect(messages[0]?.content).toContain("Epic Bard");
     expect(messages[1]?.content).toContain("Founding Engineer");
+    expect(messages[1]?.content).toContain("exactly 2 compact sentences");
     expect(messages[1]?.content).toContain("Output only the compliment text");
   });
 
@@ -31,6 +32,7 @@ describe("prompts", () => {
     expect(messages[1]?.content).toContain("They make hiring pipelines feel like victory parades.");
     expect(messages[1]?.content).toContain("Do not reuse exact metaphors");
     expect(messages[1]?.content).toContain("No markdown");
+    expect(messages[1]?.content).toContain("Exactly 2 compact sentences");
     expect(messages[1]?.content).not.toContain("40%");
   });
 });

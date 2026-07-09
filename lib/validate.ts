@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAX_COMPLIMENT_LENGTH } from "./safeText";
 
 export const MIN_INPUT_LENGTH = 3;
 export const MAX_INPUT_LENGTH = 360;
@@ -19,8 +20,8 @@ export const GenerateBodySchema = z.object({
 export const EscalateBodySchema = z.object({
   personaId: z.string().min(1),
   originalInput: z.string(),
-  currentText: z.string().min(1).max(900),
-  history: z.array(z.string().min(1).max(900)).min(1).max(MAX_HISTORY_ITEMS),
+  currentText: z.string().min(1).max(MAX_COMPLIMENT_LENGTH),
+  history: z.array(z.string().min(1).max(MAX_COMPLIMENT_LENGTH)).min(1).max(MAX_HISTORY_ITEMS),
   dramaLevel: z.number().int().min(1).max(20),
 });
 

@@ -23,7 +23,8 @@ Write one over-the-top, wildly enthusiastic, slightly unhinged compliment that m
 Rules:
 - Genuinely funny and specific to the subject. Warm and positive. Not generic. No template structure.
 - Do not mention being an AI. No preamble. No quotes. No markdown.
-- 2 to 4 sentences. Shareable. Safe for work.
+- Write exactly 2 compact sentences, 220 to 360 characters total. Hard cap: 400 characters.
+- Shareable. Safe for work.
 - No real political, religious, medical-cure, or disaster claims. Mythic, cosmic, or oracle imagery is fine as playful metaphor.
 - Output only the compliment text.`,
     },
@@ -57,7 +58,7 @@ Rules:
 - Stay in the same voice: ${args.persona.name}.
 - Raise the concept with fresh imagery. Do not just add adjectives, and do not just make it longer.
 - Do not reuse exact metaphors from previous versions. Make the difference obvious.
-- Funny, positive, shareable, safe for work. 2 to 4 sentences.
+- Funny, positive, shareable, safe for work. Exactly 2 compact sentences, 220 to 360 characters total. Hard cap: 400 characters.
 - No markdown, no stage directions, no quotes, and no preamble.
 - No real political, religious, medical-cure, or disaster claims.
 - Output only the escalated compliment.`,

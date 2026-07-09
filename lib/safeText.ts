@@ -8,6 +8,8 @@ const LEAK_PATTERNS = [
   /language model/i,
 ];
 
+export const MAX_COMPLIMENT_LENGTH = 420;
+
 export function cleanModelText(raw: string): string {
   return raw
     .trim()
@@ -31,7 +33,7 @@ export function validateCompliment(text: string): void {
   if (wordCount < 10) {
     throw new Error("The compliment came back too short to display.");
   }
-  if (text.length > 900) {
+  if (text.length > MAX_COMPLIMENT_LENGTH) {
     throw new Error("The compliment came back too long to display.");
   }
   if (!/[.!?]$/.test(text)) {

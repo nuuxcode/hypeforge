@@ -240,7 +240,7 @@ function EmptyPreview() {
           Add a role or person details, then HypeForge summons three distinct voices: Grand, Mythic, and Chaotic.
         </p>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
         {previews.map((preview) => (
           <div
             className="min-h-[230px] rounded-[24px] border border-dashed bg-[var(--panel-raised)] p-5"
@@ -264,7 +264,7 @@ function LoadingPreview() {
   return (
     <div className="space-y-4">
       <LoadingCopy />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
         {["grand", "mythic", "chaotic"].map((bucket) => (
           <div
             className="v2-card min-h-[330px] animate-pulse p-5"
@@ -312,7 +312,7 @@ function V2Card({
   return (
     <article
       aria-busy={isLoading}
-      className="v2-card v2-card-enter flex min-h-[360px] flex-col p-5 sm:p-6"
+      className="v2-card v2-card-enter h-fit min-h-[320px] p-5 sm:p-6"
       data-loading={isLoading ? "true" : "false"}
       style={styleForCard(card, index)}
     >
@@ -329,10 +329,10 @@ function V2Card({
         </span>
       </header>
 
-      <div className="mt-8 flex flex-1 flex-col justify-between gap-6">
+      <div className="mt-6 space-y-6">
         <div className="space-y-4">
           {hasText ? (
-            <p aria-live="polite" className="v2-display text-lg font-semibold leading-7 text-[var(--ink)]">
+            <p aria-live="polite" className="v2-display text-base font-semibold leading-6 text-[var(--ink)] sm:text-[1.05rem]">
               {card.text}
             </p>
           ) : (
@@ -357,7 +357,7 @@ function V2Card({
           ) : null}
         </div>
 
-        <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+        <div className="grid gap-2 min-[1500px]:grid-cols-[minmax(0,1fr)_auto]">
           {hasText ? (
             <button
               aria-label={`Make ${card.personaName} compliment more dramatic`}
@@ -414,7 +414,7 @@ function ProofStrip() {
 
   return (
     <section className="border-y border-[var(--line)] py-8" aria-label="Product proof">
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
+      <div className="mx-auto grid max-w-[1600px] gap-4 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
         {items.map((item) => (
           <div className="flex gap-4 py-3" key={item.title}>
             <div className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--cyan)]">
@@ -674,7 +674,7 @@ export default function V2Page() {
   return (
     <main className={`v2-shell min-h-dvh ${theme === "dark" ? "v2-dark" : "v2-light"}`}>
       <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--chrome-bg)] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto flex min-h-16 max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <div className="grid size-10 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)]">
               <Sparkles aria-hidden="true" className="size-5 text-[var(--coral)]" />
@@ -707,8 +707,11 @@ export default function V2Page() {
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[430px_minmax(0,1fr)] lg:px-8 lg:py-10">
-        <section className="rounded-[28px] border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6" style={{ boxShadow: "var(--panel-shadow)" }}>
+      <section className="mx-auto grid max-w-[1600px] gap-6 px-4 py-6 sm:px-6 lg:items-start lg:grid-cols-[430px_minmax(0,1fr)] lg:px-8 lg:py-10">
+        <section
+          className="self-start rounded-[28px] border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6 lg:sticky lg:top-24"
+          style={{ boxShadow: "var(--panel-shadow)" }}
+        >
           <p className="v2-mono text-[0.68rem] uppercase text-[var(--cyan)]">AI Compliment Generator</p>
           <h1 className="v2-display mt-4 text-4xl font-semibold leading-none text-[var(--text)] md:text-5xl">
             Turn any person into a <span className="v2-gradient-text">living legend.</span>
@@ -823,7 +826,7 @@ export default function V2Page() {
           {isGenerating && cards.length === 0 ? <LoadingPreview /> : null}
 
           {cards.length > 0 ? (
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
               {cards.map((card, index) => (
                 <V2Card
                   card={card}
@@ -843,7 +846,7 @@ export default function V2Page() {
 
       <ProofStrip />
 
-      <footer className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm font-semibold text-[var(--text-faint)] sm:px-6 lg:px-8">
+      <footer className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm font-semibold text-[var(--text-faint)] sm:px-6 lg:px-8">
         <p className="v2-gradient-text v2-display text-lg font-semibold">HypeForge</p>
         <p>Built for playful praise. No account needed.</p>
       </footer>

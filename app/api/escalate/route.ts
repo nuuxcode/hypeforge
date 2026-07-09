@@ -123,7 +123,7 @@ export async function POST(req: Request) {
         history,
         dramaLevel: body.data.dramaLevel,
       }),
-      { temperature: 1.05, maxOutputTokens: 280 },
+      { temperature: 1.05, maxOutputTokens: 160 },
     );
     debug.providerInfo("escalation generation succeeded", {
       personaId: persona.id,
