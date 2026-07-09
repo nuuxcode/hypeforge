@@ -8,9 +8,11 @@ import {
   History,
   Layers3,
   LoaderCircle,
+  Moon,
   RotateCcw,
   Share2,
   Sparkles,
+  Sun,
   WandSparkles,
 } from "lucide-react";
 import { PERSONAS } from "@/lib/personas";
@@ -59,6 +61,8 @@ type RetryResponse = {
   dramaLevel: number;
   debug?: ApiDebug;
 };
+
+type ThemeMode = "light" | "dark";
 
 function isGenerateResponse(value: unknown): value is GenerateResponse {
   return Boolean(value && typeof value === "object" && Array.isArray((value as GenerateResponse).cards));
@@ -203,7 +207,7 @@ function LoadingCopy() {
   }, []);
 
   return (
-    <div className="flex items-center gap-3 rounded-[18px] border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-bold text-[var(--text)]">
+    <div className="flex items-center gap-3 rounded-[18px] border border-[var(--line)] bg-[var(--control-bg)] px-4 py-3 text-sm font-bold text-[var(--text)]">
       <LoaderCircle aria-hidden="true" className="size-4 shrink-0 animate-spin text-[var(--coral)]" />
       <span>{LOADING_LINES[index]}</span>
     </div>
@@ -219,7 +223,7 @@ function EmptyPreview() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-[24px] border border-white/10 bg-white/[0.035] p-5">
+      <div className="rounded-[24px] border border-[var(--line)] bg-[var(--panel-raised)] p-5">
         <p className="v2-display text-xl font-semibold text-[var(--text)]">The compliment council is waiting.</p>
         <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[var(--text-muted)]">
           Add a role or person details, then HypeForge summons three distinct voices: Grand, Mythic, and Chaotic.
@@ -228,15 +232,15 @@ function EmptyPreview() {
       <div className="grid gap-4 lg:grid-cols-3">
         {previews.map((preview) => (
           <div
-            className="min-h-[230px] rounded-[24px] border border-dashed bg-white/[0.025] p-5"
+            className="min-h-[230px] rounded-[24px] border border-dashed bg-[var(--panel-raised)] p-5"
             key={preview.bucket}
             style={{ borderColor: `${BUCKET_ACCENT[preview.bucket]}66` }}
           >
             <div className="v2-mono text-xs uppercase text-[var(--text-faint)]">{preview.label}</div>
             <div className="mt-8 space-y-3">
-              <div className="h-3 rounded-full bg-white/10" />
-              <div className="h-3 w-10/12 rounded-full bg-white/10" />
-              <div className="h-3 w-7/12 rounded-full bg-white/10" />
+              <div className="h-3 rounded-full bg-[var(--muted-fill)]" />
+              <div className="h-3 w-10/12 rounded-full bg-[var(--muted-fill)]" />
+              <div className="h-3 w-7/12 rounded-full bg-[var(--muted-fill)]" />
             </div>
           </div>
         ))}
@@ -262,13 +266,13 @@ function LoadingPreview() {
             }
           >
             <div className="flex items-center justify-between gap-3">
-              <div className="h-3 w-24 rounded-full bg-black/10" />
-              <div className="h-8 w-24 rounded-full bg-black/10" />
+              <div className="h-3 w-24 rounded-full bg-[var(--muted-fill-strong)]" />
+              <div className="h-8 w-24 rounded-full bg-[var(--muted-fill-strong)]" />
             </div>
             <div className="mt-12 space-y-4">
-              <div className="h-5 rounded-full bg-black/10" />
-              <div className="h-5 w-11/12 rounded-full bg-black/10" />
-              <div className="h-5 w-8/12 rounded-full bg-black/10" />
+              <div className="h-5 rounded-full bg-[var(--muted-fill-strong)]" />
+              <div className="h-5 w-11/12 rounded-full bg-[var(--muted-fill-strong)]" />
+              <div className="h-5 w-8/12 rounded-full bg-[var(--muted-fill-strong)]" />
             </div>
           </div>
         ))}
@@ -309,7 +313,7 @@ function V2Card({
             {bucket}
           </p>
         </div>
-        <span className="v2-mono inline-flex h-9 shrink-0 items-center rounded-full border border-[var(--dark-line)] bg-[#e7e1d6] px-3 text-xs font-bold text-[var(--ink)]">
+        <span className="v2-mono inline-flex h-9 shrink-0 items-center rounded-full border border-[var(--dark-line)] bg-[var(--paper-secondary)] px-3 text-xs font-bold text-[var(--ink)]">
           {badgeLabel(card.dramaLevel)}
         </span>
       </header>
@@ -321,7 +325,7 @@ function V2Card({
               {card.text}
             </p>
           ) : (
-            <div className="rounded-[18px] border border-dashed border-[var(--dark-line)] bg-[#e7e1d6]/60 p-4">
+            <div className="rounded-[18px] border border-dashed border-[var(--dark-line)] bg-[var(--paper-secondary)] p-4">
               <p className="text-sm font-bold leading-6 text-[var(--ink-muted)]">
                 {card.error ?? "This persona lost the plot for a second. Retry this card."}
               </p>
@@ -329,7 +333,7 @@ function V2Card({
           )}
 
           {isLoading ? (
-            <div className="flex items-center gap-2 rounded-[14px] bg-[#111015] px-3 py-2 text-sm font-bold text-[var(--paper)]">
+            <div className="flex items-center gap-2 rounded-[14px] bg-[var(--ink)] px-3 py-2 text-sm font-bold text-[var(--paper)]">
               <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               Increasing drama...
             </div>
@@ -372,7 +376,7 @@ function V2Card({
 
           <button
             aria-label={`Copy ${card.personaName} compliment`}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[#e7e1d6] px-4 py-2 text-sm font-bold text-[var(--ink)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] px-4 py-2 text-sm font-bold text-[var(--ink)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
             disabled={!hasText || isLoading}
             type="button"
             onClick={() => onCopy(card.id, card.text)}
@@ -398,11 +402,11 @@ function ProofStrip() {
   ];
 
   return (
-    <section className="border-y border-white/10 py-8" aria-label="Product proof">
+    <section className="border-y border-[var(--line)] py-8" aria-label="Product proof">
       <div className="mx-auto grid max-w-7xl gap-4 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
         {items.map((item) => (
           <div className="flex gap-4 py-3" key={item.title}>
-            <div className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-white/10 bg-white/[0.04] text-[var(--cyan)]">
+            <div className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--cyan)]">
               <item.icon aria-hidden="true" className="size-5" />
             </div>
             <div>
@@ -417,6 +421,7 @@ function ProofStrip() {
 }
 
 export default function V2Page() {
+  const [theme, setTheme] = useState<ThemeMode>("light");
   const [input, setInput] = useState("");
   const [cards, setCards] = useState<ComplimentCardType[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -656,11 +661,11 @@ export default function V2Page() {
   );
 
   return (
-    <main className="v2-shell min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-[#08070b]/80 backdrop-blur-xl">
+    <main className={`v2-shell min-h-dvh ${theme === "dark" ? "v2-dark" : "v2-light"}`}>
+      <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--chrome-bg)] backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="grid size-10 shrink-0 place-items-center rounded-[14px] border border-white/10 bg-white/[0.04]">
+            <div className="grid size-10 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)]">
               <Sparkles aria-hidden="true" className="size-5 text-[var(--coral)]" />
             </div>
             <div className="min-w-0">
@@ -670,14 +675,29 @@ export default function V2Page() {
               </p>
             </div>
           </div>
-          <p className="v2-mono text-right text-[0.68rem] uppercase text-[var(--text-muted)]">
-            No sign-in · no saved profiles
-          </p>
+          <div className="flex shrink-0 items-center gap-2">
+            <p className="v2-mono hidden text-right text-[0.68rem] uppercase text-[var(--text-muted)] sm:block">
+              No sign-in · no saved profiles
+            </p>
+            <button
+              aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+              className="inline-flex min-h-10 items-center gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+              type="button"
+              onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+            >
+              {theme === "light" ? (
+                <Moon aria-hidden="true" className="size-4" />
+              ) : (
+                <Sun aria-hidden="true" className="size-4" />
+              )}
+              {theme === "light" ? "Dark" : "Light"}
+            </button>
+          </div>
         </div>
       </header>
 
       <section className="mx-auto grid max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:grid-cols-[430px_minmax(0,1fr)] lg:px-8 lg:py-10">
-        <section className="rounded-[28px] border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/25 sm:p-6">
+        <section className="rounded-[28px] border border-[var(--line)] bg-[var(--panel)] p-5 sm:p-6" style={{ boxShadow: "var(--panel-shadow)" }}>
           <p className="v2-mono text-[0.68rem] uppercase text-[var(--cyan)]">AI Compliment Generator</p>
           <h1 className="v2-display mt-4 text-4xl font-semibold leading-none text-[var(--text)] md:text-5xl">
             Turn any person into a <span className="v2-gradient-text">living legend.</span>
@@ -699,7 +719,7 @@ export default function V2Page() {
                 Who are we hyping?
               </label>
               <textarea
-                className="min-h-28 w-full resize-none rounded-[24px] border border-white/10 bg-[#121016] px-4 py-4 text-base font-semibold leading-7 text-[var(--text)] outline-none transition placeholder:text-[var(--text-faint)] focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
+                className="min-h-28 w-full resize-none rounded-[24px] border border-[var(--line)] bg-[var(--input-bg)] px-4 py-4 text-base font-semibold leading-7 text-[var(--text)] outline-none transition placeholder:text-[var(--input-placeholder)] focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
                 id="v2-subject"
                 maxLength={MAX_INPUT_LENGTH}
                 placeholder="e.g. Customer Success Manager, Recruiter, or my friend Sara who fixes every crisis"
@@ -723,7 +743,7 @@ export default function V2Page() {
             <div className="flex flex-wrap gap-2">
               {EXAMPLES.map((example) => (
                 <button
-                  className="min-h-10 rounded-[14px] border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[#8b5cf6]/70 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:text-sm"
+                  className="min-h-10 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[#8b5cf6]/70 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:text-sm"
                   key={example}
                   type="button"
                   onClick={() => setInput(example)}
@@ -759,7 +779,7 @@ export default function V2Page() {
             </div>
             {cards.length > 0 ? (
               <button
-                className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-white/10 bg-white/[0.04] px-4 py-2 text-sm font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-white/[0.08] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-4 py-2 text-sm font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
                 type="button"
                 onClick={() => {
                   setCards([]);
@@ -777,7 +797,7 @@ export default function V2Page() {
               <AlertTriangle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-[var(--coral)]" />
               <p className="min-w-0 flex-1">{globalError}</p>
               <button
-                className="rounded-[12px] border border-white/10 px-3 py-1 text-xs uppercase text-[var(--text-muted)] hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                className="rounded-[12px] border border-[var(--line)] px-3 py-1 text-xs uppercase text-[var(--text-muted)] hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
                 type="button"
                 onClick={() => {
                   setGlobalError(null);

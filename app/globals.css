@@ -25,15 +25,15 @@ textarea {
 }
 
 .v2-shell {
-  --bg: #08070b;
-  --bg-secondary: #0e0c12;
-  --panel: #121016;
-  --panel-raised: #18151d;
-  --paper: #f3f0e8;
-  --paper-secondary: #e7e1d6;
-  --text: #f8f5ef;
-  --text-muted: #aaa4b0;
-  --text-faint: #6f6975;
+  --bg: #fbf6ee;
+  --bg-secondary: #f1e8dc;
+  --panel: rgba(255, 252, 246, 0.78);
+  --panel-raised: rgba(255, 255, 255, 0.82);
+  --paper: #fffaf0;
+  --paper-secondary: #eee5d7;
+  --text: #141118;
+  --text-muted: #625b67;
+  --text-faint: #8c8490;
   --ink: #111015;
   --ink-muted: #5f5967;
   --purple: #8b5cf6;
@@ -42,17 +42,56 @@ textarea {
   --coral: #ff6b5f;
   --lime: #d4ff66;
   --cyan: #70e8dd;
+  --line: rgba(17, 16, 21, 0.12);
+  --line-strong: rgba(17, 16, 21, 0.18);
+  --dark-line: rgba(17, 16, 21, 0.16);
+  --control-bg: rgba(255, 255, 255, 0.68);
+  --control-hover: rgba(255, 255, 255, 0.92);
+  --input-bg: rgba(255, 250, 240, 0.88);
+  --input-placeholder: #8c8490;
+  --chrome-bg: rgba(251, 246, 238, 0.82);
+  --muted-fill: rgba(17, 16, 21, 0.08);
+  --muted-fill-strong: rgba(17, 16, 21, 0.12);
+  --panel-shadow: 0 28px 90px rgba(86, 64, 38, 0.16);
+  --card-shadow: 0 18px 50px rgba(65, 47, 29, 0.14);
+  --heat-shadow: rgba(255, 112, 94, 0.22);
+  --gradient: linear-gradient(120deg, #9e77ff 0%, #d94ba8 52%, #ff705e 100%);
+  background:
+    linear-gradient(rgba(17, 16, 21, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(17, 16, 21, 0.035) 1px, transparent 1px),
+    linear-gradient(180deg, #fffaf0 0%, #fbf6ee 44%, #f3eadf 100%);
+  background-size: 40px 40px, 40px 40px, auto;
+  color: var(--text);
+  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.v2-shell.v2-dark {
+  --bg: #08070b;
+  --bg-secondary: #0e0c12;
+  --panel: rgba(18, 16, 22, 0.78);
+  --panel-raised: rgba(24, 21, 29, 0.86);
+  --paper: #f3f0e8;
+  --paper-secondary: #e7e1d6;
+  --text: #f8f5ef;
+  --text-muted: #aaa4b0;
+  --text-faint: #6f6975;
   --line: rgba(255, 255, 255, 0.1);
   --line-strong: rgba(255, 255, 255, 0.17);
-  --dark-line: rgba(17, 16, 21, 0.16);
-  --gradient: linear-gradient(120deg, #9e77ff 0%, #d94ba8 52%, #ff705e 100%);
+  --control-bg: rgba(255, 255, 255, 0.04);
+  --control-hover: rgba(255, 255, 255, 0.08);
+  --input-bg: #121016;
+  --input-placeholder: #6f6975;
+  --chrome-bg: rgba(8, 7, 11, 0.82);
+  --muted-fill: rgba(255, 255, 255, 0.1);
+  --muted-fill-strong: rgba(255, 255, 255, 0.16);
+  --panel-shadow: 0 28px 90px rgba(0, 0, 0, 0.28);
+  --card-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+  --heat-shadow: rgba(255, 112, 94, 0.22);
   background:
     linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(180deg, #0e0c12 0%, #08070b 42%, #07060a 100%);
   background-size: 40px 40px, 40px 40px, auto;
-  color: var(--text);
-  font-family: "Manrope", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .v2-display {
@@ -85,8 +124,8 @@ textarea {
   border-radius: 24px;
   color: var(--ink);
   box-shadow:
-    0 18px 50px rgba(0, 0, 0, 0.18),
-    0 0 calc(8px + var(--heat, 0) * 26px) rgba(255, 112, 94, 0.22);
+    var(--card-shadow),
+    0 0 calc(8px + var(--heat, 0) * 26px) var(--heat-shadow);
 }
 
 .v2-card-enter {
