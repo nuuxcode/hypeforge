@@ -1,10 +1,10 @@
 import { generateCompliment, providerErrorMessage } from "@/lib/ai";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { getPersona } from "@/lib/personas";
-import { buildEscalationMessages } from "@/lib/prompts";
+import { buildTweakMessages } from "@/lib/prompts";
 import { checkAndIncrement } from "@/lib/rateLimit";
 import { cleanModelText, validateCompliment } from "@/lib/safeText";
-import { appendHistory, cleanHistory, EscalateBodySchema, sanitizeInput } from "@/lib/validate";
+import { appendHistory, cleanHistory, sanitizeInput, sanitizeTweakFeedback, TweakBodySchema } from "@/lib/validate";
 
 const COOKIE_NAME = "hypeforge_rl";
 
@@ -22,7 +22,7 @@ function cookieHeader(value: string): string {
 }
 
 export async function POST(req: Request) {
-  const debug = createApiDebug("POST /api/escalate");
+  const debug = createApiDebug("POST /api/tweak");
   debug.info("request received");
 
   let parsed: unknown;
@@ -33,38 +33,31 @@ export async function POST(req: Request) {
     return Response.json(withDebug({ error: "Invalid request body." }, debug.finish()), { status: 400 });
   }
 
-  const body = EscalateBodySchema.safeParse(parsed);
+  const body = TweakBodySchema.safeParse(parsed);
   if (!body.success) {
     debug.error("request body failed schema validation", body.error.flatten());
     return Response.json(withDebug({ error: "Invalid request body." }, debug.finish()), { status: 400 });
   }
-  debug.info("request body parsed", {
-    personaId: body.data.personaId,
-    originalInputLength: body.data.originalInput.length,
-    historyCount: body.data.history.length,
-    dramaLevel: body.data.dramaLevel,
-  });
 
-  let rl;
+  let rateLimit;
   try {
-    rl = checkAndIncrement(getCookie(req, COOKIE_NAME));
+    rateLimit = checkAndIncrement(getCookie(req, COOKIE_NAME));
   } catch (error) {
     debug.error("rate-limit configuration failed", error);
     return Response.json(withDebug({ error: "Server configuration is missing." }, debug.finish()), { status: 500 });
   }
 
-  const setCookie = cookieHeader(rl.newCookie);
-  if (!rl.ok) {
-    debug.warn("request blocked by rate limit", { resetAt: rl.resetAt });
+  const setCookie = cookieHeader(rateLimit.newCookie);
+  if (!rateLimit.ok) {
+    debug.warn("request blocked by rate limit", { resetAt: rateLimit.resetAt });
     return Response.json(
       withDebug(
-        { ok: false, error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rl.resetAt },
+        { ok: false, error: "Too much brilliance at once. Wait a moment and retry.", resetAt: rateLimit.resetAt },
         debug.finish(),
       ),
       { headers: { "Set-Cookie": setCookie } },
     );
   }
-  debug.info("rate-limit passed", { remaining: rl.remaining, resetAt: rl.resetAt });
 
   const persona = getPersona(body.data.personaId);
   if (!persona) {
@@ -74,13 +67,14 @@ export async function POST(req: Request) {
       { headers: { "Set-Cookie": setCookie } },
     );
   }
-  debug.info("persona resolved", { personaId: persona.id, personaName: persona.name });
 
   let originalInput: string;
+  let feedback: string;
   try {
     originalInput = sanitizeInput(body.data.originalInput);
+    feedback = sanitizeTweakFeedback(body.data.feedback);
   } catch (error) {
-    debug.error("original input sanitization failed", error);
+    debug.error("tweak inputs failed validation", error);
     return Response.json(
       withDebug({ ok: false, error: (error as Error).message }, debug.finish()),
       { headers: { "Set-Cookie": setCookie } },
@@ -92,65 +86,43 @@ export async function POST(req: Request) {
   try {
     validateCompliment(currentText);
   } catch {
-    debug.error("current compliment failed validation before escalation", {
-      currentTextLength: currentText.length,
-      historyCount: history.length,
-    });
+    debug.error("current compliment failed validation before tweak", { currentTextLength: currentText.length });
     return Response.json(
-      withDebug(
-        { ok: false, error: "The current compliment is too chaotic to escalate. Try generating again." },
-        debug.finish(),
-      ),
+      withDebug({ ok: false, error: "The current compliment is too chaotic to tweak. Try generating again." }, debug.finish()),
       { headers: { "Set-Cookie": setCookie } },
     );
   }
-  debug.info("escalation prompt inputs prepared", {
-    currentTextLength: currentText.length,
-    historyCount: history.length,
-  });
 
   try {
-    debug.providerInfo("escalation generation started", {
-      personaId: persona.id,
-      personaName: persona.name,
-      dramaLevel: body.data.dramaLevel,
-    });
+    debug.providerInfo("tweak generation started", { personaId: persona.id, personaName: persona.name });
     const text = await generateCompliment(
-      buildEscalationMessages({
+      buildTweakMessages({
         persona,
         originalInput,
         currentText,
         history,
         dramaLevel: body.data.dramaLevel,
+        feedback,
       }),
-      { temperature: 1.05, maxOutputTokens: 160 },
+      { temperature: 1, maxOutputTokens: 160 },
     );
-    debug.providerInfo("escalation generation succeeded", {
-      personaId: persona.id,
-      personaName: persona.name,
-      characterCount: text.length,
-    });
+    debug.providerInfo("tweak generation succeeded", { personaId: persona.id, characterCount: text.length });
 
     return Response.json(
       withDebug(
-        {
-          ok: true,
-          text,
-          history: appendHistory(history, text),
-          dramaLevel: body.data.dramaLevel + 1,
-        },
+        { ok: true, text, history: appendHistory(history, text), dramaLevel: body.data.dramaLevel },
         debug.finish(),
       ),
       {
         headers: {
           "Set-Cookie": setCookie,
-          "X-RateLimit-Remaining": String(rl.remaining),
-          "X-RateLimit-Reset": String(rl.resetAt),
+          "X-RateLimit-Remaining": String(rateLimit.remaining),
+          "X-RateLimit-Reset": String(rateLimit.resetAt),
         },
       },
     );
   } catch (error) {
-    debug.providerError("escalation generation failed", error);
+    debug.providerError("tweak generation failed", error);
     return Response.json(
       withDebug({ ok: false, error: providerErrorMessage(error) }, debug.finish()),
       { headers: { "Set-Cookie": setCookie } },

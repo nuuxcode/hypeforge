@@ -4,7 +4,8 @@ import { pickOnePerBucket } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
 import { checkAndIncrement } from "@/lib/rateLimit";
 import type { ComplimentCard, Persona } from "@/lib/types";
-import { GenerateBodySchema, sanitizeInput } from "@/lib/validate";
+import { cleanPreferenceContext, GenerateBodySchema, sanitizeInput } from "@/lib/validate";
+import type { SoftPreferenceContext } from "@/lib/types";
 
 const COOKIE_NAME = "hypeforge_rl";
 
@@ -24,9 +25,10 @@ function cookieHeader(value: string): string {
 async function generateForPersona(
   persona: Persona,
   input: string,
+  preference: SoftPreferenceContext,
   debug: ReturnType<typeof createApiDebug>,
 ): Promise<string> {
-  const messages = buildInitialMessages(persona, input);
+  const messages = buildInitialMessages(persona, input, preference);
   debug.providerInfo("persona generation started", {
     personaId: persona.id,
     personaName: persona.name,
@@ -121,7 +123,12 @@ export async function POST(req: Request) {
     debug.error("request body failed schema validation", body.error.flatten());
     return Response.json(withDebug({ error: "Invalid request body." }, debug.finish()), { status: 400 });
   }
-  debug.info("request body parsed", { inputLength: body.data.input.length });
+  const preference = cleanPreferenceContext(body.data.preference);
+  debug.info("request body parsed", {
+    inputLength: body.data.input.length,
+    likedSignals: preference.liked.length,
+    dislikedSignals: preference.disliked.length,
+  });
 
   let rl;
   try {
@@ -164,7 +171,7 @@ export async function POST(req: Request) {
   })));
 
   const settled = await Promise.allSettled(
-    selected.map(async (persona) => makeCard(persona, input, await generateForPersona(persona, input, debug))),
+    selected.map(async (persona) => makeCard(persona, input, await generateForPersona(persona, input, preference, debug))),
   );
 
   const cards = settled.map((result, index) =>

@@ -15,6 +15,16 @@ describe("prompts", () => {
     expect(messages[1]?.content).toContain("Output only the compliment text");
   });
 
+  it("uses feedback as a soft, non-copying taste signal", () => {
+    const messages = buildInitialMessages(persona!, "Founding Engineer", {
+      liked: ["Warm, specific praise with an unexpected metaphor."],
+      disliked: ["Long, generic praise with repeated cosmic imagery."],
+    });
+
+    expect(messages[1]?.content).toContain("Soft taste signals");
+    expect(messages[1]?.content).toContain("Never copy wording");
+  });
+
   it("passes prior public versions into escalation", () => {
     expect(persona).not.toBeNull();
     const messages = buildEscalationMessages({

@@ -3,6 +3,7 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  BookOpen,
   Check,
   Copy,
   History,
@@ -11,20 +12,43 @@ import {
   Moon,
   RotateCcw,
   Share2,
+  SlidersHorizontal,
   Sparkles,
   Sun,
+  ThumbsDown,
+  ThumbsUp,
   WandSparkles,
 } from "lucide-react";
+import { ComplimentGuideDialog } from "@/components/compliment-guide-dialog";
+import { DeckHistoryDrawer } from "@/components/deck-history-drawer";
+import {
+  buildSoftPreferenceContext,
+  clearDeckHistory,
+  clearTasteSignals,
+  createShareToken,
+  loadDeckHistory,
+  loadTasteSignals,
+  readShareToken,
+  removeDeckHistory,
+  removeTasteSignal,
+  saveDeckHistory,
+  saveTasteSignal,
+  type DeckHistoryEntry,
+  type TasteSignal,
+} from "@/lib/deck-history";
 import { PERSONAS } from "@/lib/personas";
 import type {
   ApiDebug,
   ApiErrorResponse,
   ComplimentCard as ComplimentCardType,
+  ComplimentCardVersion,
   EscalateResponse,
+  FeedbackVote,
   GenerateResponse,
   PersonaBucket,
+  TweakResponse,
 } from "@/lib/types";
-import { MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
+import { MAX_HISTORY_ITEMS, MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
 
 const EXAMPLES = [
   "Customer Success Manager",
@@ -54,6 +78,8 @@ const LOADING_LINES = [
   "Polishing the crown...",
 ] as const;
 
+const MAX_CARD_VERSIONS = 50;
+
 type RetryResponse = {
   ok?: true;
   text: string;
@@ -61,6 +87,8 @@ type RetryResponse = {
   dramaLevel: number;
   debug?: ApiDebug;
 };
+
+type CardVersionPanel = Record<string, boolean>;
 
 type ThemeMode = "light" | "dark";
 
@@ -79,6 +107,10 @@ function isEscalateResponse(value: unknown): value is EscalateResponse {
 }
 
 function isRetryResponse(value: unknown): value is RetryResponse {
+  return isEscalateResponse(value);
+}
+
+function isTweakResponse(value: unknown): value is TweakResponse {
   return isEscalateResponse(value);
 }
 
@@ -197,6 +229,45 @@ function bucketFor(card: ComplimentCardType): PersonaBucket {
   return PERSONA_BUCKET[card.personaId] ?? "grand";
 }
 
+function createCardVersion(
+  text: string,
+  dramaLevel: number,
+  kind: ComplimentCardVersion["kind"],
+): ComplimentCardVersion {
+  return {
+    id: crypto.randomUUID(),
+    text,
+    dramaLevel,
+    kind,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function versionsForCard(card: ComplimentCardType): ComplimentCardVersion[] {
+  if (card.versions?.length) return card.versions;
+  const versions = card.history.length > 0 ? card.history : card.text ? [card.text] : [];
+  return versions.map((text, index) =>
+    createCardVersion(text, index === 0 ? 1 : Math.min(card.dramaLevel, index + 1), index === 0 ? "generated" : "dramatic"),
+  );
+}
+
+function appendCardVersion(card: ComplimentCardType, version: ComplimentCardVersion): ComplimentCardVersion[] {
+  return [...versionsForCard(card), version].slice(-MAX_CARD_VERSIONS);
+}
+
+function hydrateCard(card: ComplimentCardType): ComplimentCardType {
+  return {
+    ...card,
+    status: "idle",
+    copied: false,
+    versions: versionsForCard(card),
+  };
+}
+
+function hydrateCards(cards: ComplimentCardType[]): ComplimentCardType[] {
+  return cards.map(hydrateCard);
+}
+
 function styleForCard(card: ComplimentCardType, index = 0): CSSProperties {
   const bucket = bucketFor(card);
   const heat = Math.min(Math.max((card.dramaLevel - 1) / 3, 0), 1);
@@ -298,16 +369,38 @@ function V2Card({
   onCopy,
   onEscalate,
   onRetry,
+  onTweak,
+  onSetFeedback,
+  onRestoreVersion,
+  versionsOpen,
+  onToggleVersions,
+  tweakOpen,
+  tweakValue,
+  onToggleTweak,
+  onTweakValueChange,
 }: {
   card: ComplimentCardType;
   index: number;
   onCopy: (cardId: string, text: string) => void;
   onEscalate: (cardId: string) => void;
   onRetry: (cardId: string) => void;
+  onTweak: (cardId: string) => void;
+  onSetFeedback: (cardId: string, vote: FeedbackVote) => void;
+  onRestoreVersion: (cardId: string, version: ComplimentCardVersion) => void;
+  versionsOpen: boolean;
+  onToggleVersions: (cardId: string) => void;
+  tweakOpen: boolean;
+  tweakValue: string;
+  onToggleTweak: (cardId: string) => void;
+  onTweakValueChange: (cardId: string, value: string) => void;
 }) {
   const isLoading = card.status === "loading";
   const hasText = card.text.trim().length > 0;
   const bucket = bucketFor(card);
+  const versions = versionsForCard(card);
+
+  const toolClass =
+    "grid size-9 place-items-center rounded-[12px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] text-[var(--ink)] transition hover:-translate-y-0.5 hover:bg-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45";
 
   return (
     <article
@@ -329,7 +422,59 @@ function V2Card({
         </span>
       </header>
 
-      <div className="mt-6 space-y-6">
+      <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[var(--dark-line)] py-3">
+        <button
+          aria-label={`Like ${card.personaName} compliment`}
+          aria-pressed={card.feedback === "up"}
+          className={`${toolClass} ${card.feedback === "up" ? "border-[#446100] bg-[#d4ff66] text-[#203000]" : ""}`}
+          disabled={!hasText || isLoading}
+          title="Helpful - use more of this feeling"
+          type="button"
+          onClick={() => onSetFeedback(card.id, "up")}
+        >
+          <ThumbsUp aria-hidden="true" className="size-4" />
+        </button>
+        <button
+          aria-label={`Dislike ${card.personaName} compliment`}
+          aria-pressed={card.feedback === "down"}
+          className={`${toolClass} ${card.feedback === "down" ? "border-[#ff6b5f] bg-[#ff6b5f]/15 text-[#8c2d24]" : ""}`}
+          disabled={!hasText || isLoading}
+          title="Not for me - use less of this feeling"
+          type="button"
+          onClick={() => onSetFeedback(card.id, "down")}
+        >
+          <ThumbsDown aria-hidden="true" className="size-4" />
+        </button>
+        <button
+          aria-expanded={versionsOpen}
+          aria-label={`Open ${card.personaName} version history`}
+          className={toolClass}
+          disabled={versions.length === 0 || isLoading}
+          title="Version history"
+          type="button"
+          onClick={() => onToggleVersions(card.id)}
+        >
+          <History aria-hidden="true" className="size-4" />
+        </button>
+        <button
+          aria-expanded={tweakOpen}
+          aria-label={`Tweak ${card.personaName} compliment`}
+          className={toolClass}
+          disabled={!hasText || isLoading}
+          title="Tweak this card"
+          type="button"
+          onClick={() => onToggleTweak(card.id)}
+        >
+          <SlidersHorizontal aria-hidden="true" className="size-4" />
+        </button>
+        {card.feedback ? (
+          <span className="ml-1 text-xs font-bold text-[var(--ink-muted)]">
+            {card.feedback === "up" ? "Saved as a taste signal" : "Less of this next time"}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="mt-5 space-y-6">
         <div className="space-y-4">
           {hasText ? (
             <p aria-live="polite" className="v2-display text-base font-semibold leading-6 text-[var(--ink)] sm:text-[1.05rem]">
@@ -356,6 +501,63 @@ function V2Card({
             </div>
           ) : null}
         </div>
+
+        {versionsOpen ? (
+          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`${card.personaName} version history`}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="v2-mono text-[0.68rem] font-bold uppercase text-[var(--ink-muted)]">Version history</p>
+              <span className="text-xs font-bold text-[var(--ink-muted)]">{versions.length} saved</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {[...versions].reverse().map((version, reverseIndex) => (
+                <div className="rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] p-3" key={version.id}>
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs font-bold uppercase text-[var(--ink-muted)]">
+                      {version.kind} · Drama {String(version.dramaLevel).padStart(2, "0")}
+                    </p>
+                    <button
+                      className="text-xs font-bold text-[var(--purple)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                      disabled={version.text === card.text && version.dramaLevel === card.dramaLevel}
+                      type="button"
+                      onClick={() => onRestoreVersion(card.id, version)}
+                    >
+                      {reverseIndex === 0 && version.text === card.text ? "Current" : "Restore"}
+                    </button>
+                  </div>
+                  <p className="mt-2 line-clamp-3 text-sm font-medium leading-5 text-[var(--ink-muted)]">{version.text}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {tweakOpen && hasText ? (
+          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`Tweak ${card.personaName} compliment`}>
+            <label className="v2-mono text-[0.68rem] uppercase text-[var(--ink-muted)]" htmlFor={`tweak-${card.id}`}>
+              What should change?
+            </label>
+            <textarea
+              className="mt-2 min-h-24 w-full resize-y rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] px-3 py-3 text-sm font-semibold leading-5 text-[var(--ink)] outline-none focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
+              id={`tweak-${card.id}`}
+              maxLength={240}
+              placeholder="e.g. shorter, warmer, less cosmic, mention their calm under pressure"
+              value={tweakValue}
+              onChange={(event) => onTweakValueChange(card.id, event.target.value)}
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-[var(--ink-muted)]">{tweakValue.length}/240</span>
+              <button
+                className="inline-flex min-h-10 items-center gap-2 rounded-[12px] bg-[var(--ink)] px-3 text-sm font-bold text-[var(--paper)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+                disabled={isLoading || tweakValue.trim().length < 3}
+                type="button"
+                onClick={() => onTweak(card.id)}
+              >
+                {isLoading ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}
+                Regenerate with note
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         <div className="grid gap-2 min-[1500px]:grid-cols-[minmax(0,1fr)_auto]">
           {hasText ? (
@@ -437,6 +639,15 @@ export default function V2Page() {
   const [cards, setCards] = useState<ComplimentCardType[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [deckHistory, setDeckHistory] = useState<DeckHistoryEntry[]>([]);
+  const [tasteSignals, setTasteSignals] = useState<TasteSignal[]>([]);
+  const [currentDeckId, setCurrentDeckId] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const [versionPanels, setVersionPanels] = useState<CardVersionPanel>({});
+  const [tweakCardId, setTweakCardId] = useState<string | null>(null);
+  const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const trimmedInput = input.trim();
@@ -444,6 +655,7 @@ export default function V2Page() {
     () => trimmedInput.length >= MIN_INPUT_LENGTH && trimmedInput.length <= MAX_INPUT_LENGTH,
     [trimmedInput],
   );
+  const tasteContext = useMemo(() => buildSoftPreferenceContext(tasteSignals), [tasteSignals]);
 
   useEffect(() => {
     console.info("[HypeForge V2 UI] mounted", {
@@ -452,6 +664,70 @@ export default function V2Page() {
     const timers = copyTimers.current;
     return () => Object.values(timers).forEach((timer) => clearTimeout(timer));
   }, []);
+
+  useEffect(() => {
+    const restoreTimer = window.setTimeout(() => {
+      const storedDecks = loadDeckHistory();
+      setDeckHistory(storedDecks);
+      setTasteSignals(loadTasteSignals());
+
+      const token = new URLSearchParams(window.location.hash.slice(1)).get("deck");
+      const sharedDeck = token ? readShareToken(token) : null;
+      if (!sharedDeck) return;
+
+      const createdAt = new Date().toISOString();
+      const restoredCards = sharedDeck.cards.map((card) => {
+        const text = card.text.trim();
+        return {
+          id: crypto.randomUUID(),
+          originalInput: card.originalInput || sharedDeck.input,
+          personaId: card.personaId,
+          personaName: card.personaName,
+          text,
+          history: text ? [text] : [],
+          versions: text ? [createCardVersion(text, card.dramaLevel, "generated")] : [],
+          dramaLevel: card.dramaLevel,
+          status: "idle" as const,
+          copied: false,
+        };
+      });
+      const deckId = crypto.randomUUID();
+      const entry: DeckHistoryEntry = {
+        id: deckId,
+        input: sharedDeck.input,
+        cards: restoredCards,
+        createdAt,
+        updatedAt: createdAt,
+      };
+      setDeckHistory(saveDeckHistory(entry));
+      setCurrentDeckId(deckId);
+      setInput(sharedDeck.input);
+      setCards(restoredCards);
+      setShareMessage("Shared deck saved to this device.");
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+    }, 0);
+
+    return () => window.clearTimeout(restoreTimer);
+  }, []);
+
+  const persistDeck = useCallback(
+    (nextCards: ComplimentCardType[], preferredId?: string) => {
+      const deckId = preferredId ?? currentDeckId ?? crypto.randomUUID();
+      const existing = loadDeckHistory().find((entry) => entry.id === deckId);
+      const now = new Date().toISOString();
+      const entry: DeckHistoryEntry = {
+        id: deckId,
+        input: nextCards[0]?.originalInput ?? trimmedInput,
+        cards: nextCards.map(hydrateCard),
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      };
+      setDeckHistory(saveDeckHistory(entry));
+      setCurrentDeckId(deckId);
+      return deckId;
+    },
+    [currentDeckId, trimmedInput],
+  );
 
   const setCardCopied = useCallback((cardId: string, copied: boolean) => {
     setCards((current) => current.map((card) => (card.id === cardId ? { ...card, copied } : card)));
@@ -478,7 +754,7 @@ export default function V2Page() {
     setGlobalError(null);
     setCards([]);
 
-    const payload = { input: trimmedInput };
+    const payload = { input: trimmedInput, preference: tasteContext };
     const startedAt = performance.now();
     try {
       const response = await fetch("/api/generate", {
@@ -497,25 +773,31 @@ export default function V2Page() {
       });
 
       if (isApiErrorResponse(body)) {
-        setCards(hasVisibleCards(body) ? body.cards : []);
+        const nextCards = hasVisibleCards(body) ? hydrateCards(body.cards) : [];
+        setCards(nextCards);
+        if (nextCards.length > 0) persistDeck(nextCards, crypto.randomUUID());
         setGlobalError(globalErrorMessage(body));
         return;
       }
 
       if (!response.ok || !isGenerateResponse(body)) {
-        setCards(hasVisibleCards(body) ? body.cards : []);
+        const nextCards = hasVisibleCards(body) ? hydrateCards(body.cards) : [];
+        setCards(nextCards);
+        if (nextCards.length > 0) persistDeck(nextCards, crypto.randomUUID());
         setGlobalError(globalErrorMessage(body));
         return;
       }
 
-      setCards(body.cards);
+      const nextCards = hydrateCards(body.cards);
+      setCards(nextCards);
+      persistDeck(nextCards, crypto.randomUUID());
     } catch (error) {
       logApiExchange({ endpoint: "POST /api/generate", payload, startedAt, error });
       setGlobalError("The forge hiccuped. The compliment engine got overwhelmed by your brilliance. Try again.");
     } finally {
       setIsGenerating(false);
     }
-  }, [isGenerating, trimmedInput]);
+  }, [isGenerating, persistDeck, tasteContext, trimmedInput]);
 
   const escalate = useCallback(
     async (cardId: string) => {
@@ -560,27 +842,28 @@ export default function V2Page() {
           return;
         }
 
-        setCards((current) =>
-          current.map((item) =>
-            item.id === cardId
-              ? {
-                  ...item,
-                  text: body.text,
-                  history: body.history,
-                  dramaLevel: body.dramaLevel,
-                  status: "idle",
-                  error: undefined,
-                  copied: false,
-                }
-              : item,
-          ),
+        const nextCards = cards.map((item) =>
+          item.id === cardId
+            ? {
+                ...item,
+                text: body.text,
+                history: body.history,
+                versions: appendCardVersion(item, createCardVersion(body.text, body.dramaLevel, "dramatic")),
+                dramaLevel: body.dramaLevel,
+                status: "idle" as const,
+                error: undefined,
+                copied: false,
+              }
+            : item,
         );
+        setCards(nextCards);
+        persistDeck(nextCards);
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/escalate", payload, startedAt, error });
         setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
       }
     },
-    [cards, setCardError],
+    [cards, persistDeck, setCardError],
   );
 
   const retryCard = useCallback(
@@ -615,28 +898,184 @@ export default function V2Page() {
           return;
         }
 
-        setCards((current) =>
-          current.map((item) =>
-            item.id === cardId
-              ? {
-                  ...item,
-                  text: body.text,
-                  history: body.history,
-                  dramaLevel: body.dramaLevel,
-                  status: "idle",
-                  error: undefined,
-                  copied: false,
-                }
-              : item,
-          ),
+        const nextCards = cards.map((item) =>
+          item.id === cardId
+            ? {
+                ...item,
+                text: body.text,
+                history: [...item.history, body.text].slice(-MAX_HISTORY_ITEMS),
+                versions: appendCardVersion(item, createCardVersion(body.text, body.dramaLevel, "generated")),
+                dramaLevel: body.dramaLevel,
+                status: "idle" as const,
+                error: undefined,
+                copied: false,
+              }
+            : item,
         );
+        setCards(nextCards);
+        persistDeck(nextCards);
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/retry", payload, startedAt, error });
         setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
       }
     },
-    [cards, setCardError],
+    [cards, persistDeck, setCardError],
   );
+
+  const tweakCard = useCallback(
+    async (cardId: string) => {
+      const card = cards.find((item) => item.id === cardId);
+      const feedback = tweakDrafts[cardId]?.trim() ?? "";
+      if (!card || card.status === "loading" || !card.text || feedback.length < 3) return;
+
+      setCards((current) =>
+        current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
+      );
+
+      const payload = {
+        personaId: card.personaId,
+        originalInput: card.originalInput,
+        currentText: card.text,
+        history: card.history,
+        dramaLevel: card.dramaLevel,
+        feedback,
+      };
+      const startedAt = performance.now();
+      try {
+        const response = await fetch("/api/tweak", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const body = (await response.json().catch(() => ({}))) as unknown;
+        logApiExchange({
+          endpoint: "POST /api/tweak",
+          payload,
+          status: response.status,
+          ok: response.ok && !isApiErrorResponse(body),
+          body,
+          startedAt,
+        });
+
+        if (!response.ok || isApiErrorResponse(body) || !isTweakResponse(body)) {
+          setCardError(cardId, cardErrorMessage(body));
+          return;
+        }
+
+        const nextCards = cards.map((item) =>
+          item.id === cardId
+            ? {
+                ...item,
+                text: body.text,
+                history: body.history,
+                versions: appendCardVersion(item, createCardVersion(body.text, body.dramaLevel, "tweaked")),
+                dramaLevel: body.dramaLevel,
+                status: "idle" as const,
+                error: undefined,
+                copied: false,
+              }
+            : item,
+        );
+        setCards(nextCards);
+        persistDeck(nextCards);
+        setTweakCardId(null);
+        setTweakDrafts((current) => ({ ...current, [cardId]: "" }));
+      } catch (error) {
+        logApiExchange({ endpoint: "POST /api/tweak", payload, startedAt, error });
+        setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+      }
+    },
+    [cards, persistDeck, setCardError, tweakDrafts],
+  );
+
+  const setCardFeedback = useCallback(
+    (cardId: string, vote: FeedbackVote) => {
+      const card = cards.find((item) => item.id === cardId);
+      if (!card || !card.text) return;
+      const nextVote = card.feedback === vote ? undefined : vote;
+      const nextCards = cards.map((item) => (item.id === cardId ? { ...item, feedback: nextVote } : item));
+      setCards(nextCards);
+      const deckId = persistDeck(nextCards);
+      const signalId = `${deckId}:${cardId}`;
+
+      if (!nextVote) {
+        setTasteSignals(removeTasteSignal(signalId));
+        return;
+      }
+
+      setTasteSignals(
+        saveTasteSignal({
+          id: signalId,
+          deckId,
+          cardId,
+          vote: nextVote,
+          text: card.text,
+          personaName: card.personaName,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+    },
+    [cards, persistDeck],
+  );
+
+  const restoreCardVersion = useCallback(
+    (cardId: string, version: ComplimentCardVersion) => {
+      const nextCards = cards.map((item) =>
+        item.id === cardId
+          ? { ...item, text: version.text, dramaLevel: version.dramaLevel, status: "idle" as const, error: undefined, copied: false }
+          : item,
+      );
+      setCards(nextCards);
+      persistDeck(nextCards);
+    },
+    [cards, persistDeck],
+  );
+
+  const restoreDeck = useCallback((entry: DeckHistoryEntry) => {
+    setInput(entry.input);
+    setCards(hydrateCards(entry.cards));
+    setCurrentDeckId(entry.id);
+    setGlobalError(null);
+    setHistoryOpen(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const shareDeck = useCallback(async () => {
+    const shareableCards = cards.filter((card) => card.text.trim());
+    if (shareableCards.length === 0) return;
+    const token = createShareToken(shareableCards[0]?.originalInput ?? trimmedInput, shareableCards);
+    const url = `${window.location.origin}${window.location.pathname}#deck=${token}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: "HypeForge compliment deck", text: "A compliment deck made for you.", url });
+        setShareMessage("Share sheet opened.");
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        setShareMessage("Share link copied.");
+      } else {
+        fallbackCopy(url);
+        setShareMessage("Share link copied.");
+      }
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setShareMessage("Share link could not be copied.");
+    }
+  }, [cards, trimmedInput]);
+
+  const clearSavedDecks = useCallback(() => {
+    clearDeckHistory();
+    setDeckHistory([]);
+    setCurrentDeckId(null);
+  }, []);
+
+  const resetTaste = useCallback(() => {
+    clearTasteSignals();
+    setTasteSignals([]);
+    if (cards.length === 0) return;
+    const nextCards = cards.map((card) => ({ ...card, feedback: undefined }));
+    setCards(nextCards);
+    persistDeck(nextCards);
+  }, [cards, persistDeck]);
 
   const copyText = useCallback(
     async (cardId: string, text: string) => {
@@ -674,13 +1113,13 @@ export default function V2Page() {
   return (
     <main className={`v2-shell min-h-dvh ${theme === "dark" ? "v2-dark" : "v2-light"}`}>
       <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--chrome-bg)] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 max-w-[1600px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="mx-auto flex min-h-16 max-w-[1600px] items-center justify-between gap-2 px-2 min-[375px]:px-3 sm:gap-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="grid size-10 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)]">
               <Sparkles aria-hidden="true" className="size-5 text-[var(--coral)]" />
             </div>
             <div className="min-w-0">
-              <p className="v2-gradient-text v2-display text-xl font-semibold">HypeForge</p>
+              <p className="v2-gradient-text v2-display text-lg font-semibold min-[360px]:text-xl">HypeForge</p>
               <p className="v2-mono hidden text-[0.68rem] uppercase text-[var(--text-faint)] sm:block">
                 AI Compliment Generator
               </p>
@@ -688,8 +1127,38 @@ export default function V2Page() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <p className="v2-mono hidden text-right text-[0.68rem] uppercase text-[var(--text-muted)] sm:block">
-              No sign-in · no saved profiles
+              Private saved decks · no sign-in
             </p>
+            <button
+              aria-label="Open compliment guide"
+              className="hidden size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 min-[380px]:grid"
+              title="Compliment guide"
+              type="button"
+              onClick={() => setGuideOpen(true)}
+            >
+              <BookOpen aria-hidden="true" className="size-4" />
+            </button>
+            <button
+              aria-label="Open saved compliment decks"
+              className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
+              title="Saved compliment decks"
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <History aria-hidden="true" className="size-4" />
+              <span className="hidden sm:inline">Saved</span>
+            </button>
+            {cards.some((card) => card.text.trim()) ? (
+              <button
+                aria-label="Share this compliment deck"
+                className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                title="Share this deck"
+                type="button"
+                onClick={shareDeck}
+              >
+                <Share2 aria-hidden="true" className="size-4" />
+              </button>
+            ) : null}
             <button
               aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
               className="inline-flex min-h-10 items-center gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
@@ -701,7 +1170,7 @@ export default function V2Page() {
               ) : (
                 <Sun aria-hidden="true" className="size-4" />
               )}
-              {theme === "light" ? "Dark" : "Light"}
+              <span className="hidden sm:inline">{theme === "light" ? "Dark" : "Light"}</span>
             </button>
           </div>
         </div>
@@ -797,7 +1266,9 @@ export default function V2Page() {
                 type="button"
                 onClick={() => {
                   setCards([]);
+                  setCurrentDeckId(null);
                   setGlobalError(null);
+                  setShareMessage(null);
                 }}
               >
                 <RotateCcw aria-hidden="true" className="size-4" />
@@ -805,6 +1276,12 @@ export default function V2Page() {
               </button>
             ) : null}
           </div>
+
+          {shareMessage ? (
+            <p className="rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-sm font-bold text-[var(--text)]" role="status">
+              {shareMessage}
+            </p>
+          ) : null}
 
           {globalError ? (
             <div className="flex items-start gap-3 rounded-[18px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 p-4 text-sm font-bold text-[var(--text)]">
@@ -835,6 +1312,19 @@ export default function V2Page() {
                   onCopy={copyText}
                   onEscalate={escalate}
                   onRetry={retryCard}
+                  onTweak={tweakCard}
+                  onSetFeedback={setCardFeedback}
+                  onRestoreVersion={restoreCardVersion}
+                  versionsOpen={Boolean(versionPanels[card.id])}
+                  onToggleVersions={(cardId) =>
+                    setVersionPanels((current) => ({ ...current, [cardId]: !current[cardId] }))
+                  }
+                  tweakOpen={tweakCardId === card.id}
+                  tweakValue={tweakDrafts[card.id] ?? ""}
+                  onToggleTweak={(cardId) => setTweakCardId((current) => (current === cardId ? null : cardId))}
+                  onTweakValueChange={(cardId, value) =>
+                    setTweakDrafts((current) => ({ ...current, [cardId]: value }))
+                  }
                 />
               ))}
             </div>
@@ -850,6 +1340,22 @@ export default function V2Page() {
         <p className="v2-gradient-text v2-display text-lg font-semibold">HypeForge</p>
         <p>Built for playful praise. No account needed.</p>
       </footer>
+
+      <DeckHistoryDrawer
+        entries={deckHistory}
+        open={historyOpen}
+        tasteSignalCount={tasteSignals.length}
+        onClear={clearSavedDecks}
+        onClose={() => setHistoryOpen(false)}
+        onDelete={(id) => setDeckHistory(removeDeckHistory(id))}
+        onOpenGuide={() => {
+          setHistoryOpen(false);
+          setGuideOpen(true);
+        }}
+        onResetTaste={resetTaste}
+        onRestore={restoreDeck}
+      />
+      <ComplimentGuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
     </main>
   );
 }

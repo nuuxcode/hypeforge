@@ -2,6 +2,23 @@ export type CardStatus = "idle" | "loading" | "error";
 
 export type PersonaBucket = "grand" | "mythic" | "chaotic";
 
+export type FeedbackVote = "up" | "down";
+
+export type CardVersionKind = "generated" | "dramatic" | "tweaked";
+
+export type ComplimentCardVersion = {
+  id: string;
+  text: string;
+  dramaLevel: number;
+  kind: CardVersionKind;
+  createdAt: string;
+};
+
+export type SoftPreferenceContext = {
+  liked: string[];
+  disliked: string[];
+};
+
 export type Persona = {
   id: string;
   name: string;
@@ -20,6 +37,8 @@ export type ComplimentCard = {
   status: CardStatus;
   copied: boolean;
   error?: string;
+  feedback?: FeedbackVote;
+  versions?: ComplimentCardVersion[];
 };
 
 export type ApiDebugEvent = {
@@ -45,6 +64,14 @@ export type GenerateResponse = {
 };
 
 export type EscalateResponse = {
+  ok?: true;
+  text: string;
+  history: string[];
+  dramaLevel: number;
+  debug?: ApiDebug;
+};
+
+export type TweakResponse = {
   ok?: true;
   text: string;
   history: string[];
