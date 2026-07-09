@@ -39,6 +39,7 @@ export type ComplimentCard = {
   error?: string;
   feedback?: FeedbackVote;
   versions?: ComplimentCardVersion[];
+  activeVersionId?: string;
 };
 
 export type ApiDebugEvent = {

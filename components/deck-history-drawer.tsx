@@ -2,6 +2,7 @@
 
 import { BookOpen, History, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Tooltip } from "@/components/tooltip";
 import type { DeckHistoryEntry } from "@/lib/deck-history";
 
 function matchesQuery(entry: DeckHistoryEntry, query: string): boolean {
@@ -62,15 +63,16 @@ export function DeckHistoryDrawer({
             <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Private workspace</p>
             <h2 className="v2-display mt-1 text-xl font-semibold text-[var(--text)]">Saved compliment decks</h2>
           </div>
-          <button
-            aria-label="Close saved decks"
-            className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-            title="Close"
-            type="button"
-            onClick={onClose}
-          >
-            <X aria-hidden="true" className="size-4" />
-          </button>
+          <Tooltip label="Close saved decks">
+            <button
+              aria-label="Close saved decks"
+              className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+              type="button"
+              onClick={onClose}
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
         </header>
 
         <div className="border-b border-[var(--line)] p-4">
@@ -145,15 +147,16 @@ export function DeckHistoryDrawer({
                       {entry.cards.map((card) => card.personaName).join(" · ")}
                     </p>
                   </button>
-                  <button
-                    aria-label={`Delete saved deck for ${entry.input}`}
-                    className="absolute right-3 top-3 grid size-9 place-items-center rounded-[12px] text-[var(--text-faint)] transition hover:bg-[#ff6b5f]/10 hover:text-[var(--coral)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                    title="Delete saved deck"
-                    type="button"
-                    onClick={() => onDelete(entry.id)}
-                  >
-                    <Trash2 aria-hidden="true" className="size-4" />
-                  </button>
+                  <Tooltip className="absolute right-3 top-3" label="Delete saved deck">
+                    <button
+                      aria-label={`Delete saved deck for ${entry.input}`}
+                      className="grid size-9 place-items-center rounded-[12px] text-[var(--text-faint)] transition hover:bg-[#ff6b5f]/10 hover:text-[var(--coral)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                      type="button"
+                      onClick={() => onDelete(entry.id)}
+                    >
+                      <Trash2 aria-hidden="true" className="size-4" />
+                    </button>
+                  </Tooltip>
                 </article>
               ))}
             </div>

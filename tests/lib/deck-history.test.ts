@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSoftPreferenceContext, createShareToken, readShareToken, type TasteSignal } from "@/lib/deck-history";
+import { buildSoftPreferenceContext, createShareToken, nextFeedbackVote, readShareToken, type TasteSignal } from "@/lib/deck-history";
 import type { ComplimentCard } from "@/lib/types";
 
 const card: ComplimentCard = {
@@ -70,5 +70,11 @@ describe("deck history helpers", () => {
       liked: ["Newer liked wording", "Older liked wording"],
       disliked: ["Too much cosmic language"],
     });
+  });
+
+  it("keeps exactly one vote per card and toggles the selected vote off", () => {
+    expect(nextFeedbackVote("down", "up")).toBe("up");
+    expect(nextFeedbackVote("up", "down")).toBe("down");
+    expect(nextFeedbackVote("up", "up")).toBeUndefined();
   });
 });

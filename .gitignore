@@ -43,6 +43,7 @@ docs/
 # local dev logs (not for public)
 logs/
 screenlog.*
+.data/
 
 # typescript
 *.tsbuildinfo

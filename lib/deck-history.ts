@@ -18,7 +18,7 @@ export type TasteSignal = {
   createdAt: string;
 };
 
-type SharedDeck = {
+export type SharedDeckSnapshot = {
   input: string;
   cards: Array<
     Pick<ComplimentCard, "personaId" | "personaName" | "text" | "dramaLevel" | "originalInput">
@@ -110,6 +110,10 @@ export function buildSoftPreferenceContext(signals: TasteSignal[]): SoftPreferen
   return { liked: summary("up"), disliked: summary("down") };
 }
 
+export function nextFeedbackVote(current: FeedbackVote | undefined, requested: FeedbackVote): FeedbackVote | undefined {
+  return current === requested ? undefined : requested;
+}
+
 function toBase64Url(value: string): string {
   return btoa(encodeURIComponent(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
@@ -124,7 +128,7 @@ function fromBase64Url(value: string): string | null {
 }
 
 export function createShareToken(input: string, cards: ComplimentCard[]): string {
-  const deck: SharedDeck = {
+  const deck: SharedDeckSnapshot = {
     input,
     cards: cards
       .filter((card) => card.text.trim())
@@ -139,12 +143,12 @@ export function createShareToken(input: string, cards: ComplimentCard[]): string
   return toBase64Url(JSON.stringify(deck));
 }
 
-export function readShareToken(token: string): SharedDeck | null {
+export function readShareToken(token: string): SharedDeckSnapshot | null {
   const decoded = fromBase64Url(token);
   if (!decoded) return null;
 
   try {
-    const deck = JSON.parse(decoded) as SharedDeck;
+    const deck = JSON.parse(decoded) as SharedDeckSnapshot;
     if (!deck || typeof deck.input !== "string" || !Array.isArray(deck.cards) || deck.cards.length === 0) return null;
     if (
       deck.cards.some(

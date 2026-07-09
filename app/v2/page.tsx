@@ -1,6 +1,7 @@
 "use client";
 
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   BookOpen,
@@ -21,19 +22,21 @@ import {
 } from "lucide-react";
 import { ComplimentGuideDialog } from "@/components/compliment-guide-dialog";
 import { DeckHistoryDrawer } from "@/components/deck-history-drawer";
+import { Tooltip } from "@/components/tooltip";
 import {
   buildSoftPreferenceContext,
   clearDeckHistory,
   clearTasteSignals,
-  createShareToken,
   loadDeckHistory,
   loadTasteSignals,
+  nextFeedbackVote,
   readShareToken,
   removeDeckHistory,
   removeTasteSignal,
   saveDeckHistory,
   saveTasteSignal,
   type DeckHistoryEntry,
+  type SharedDeckSnapshot,
   type TasteSignal,
 } from "@/lib/deck-history";
 import { PERSONAS } from "@/lib/personas";
@@ -60,8 +63,8 @@ const EXAMPLES = [
 ] as const;
 
 const BUCKET_ACCENT: Record<PersonaBucket, string> = {
-  grand: "#8b5cf6",
-  mythic: "#70e8dd",
+  grand: "#7050c8",
+  mythic: "#168a87",
   chaotic: "#ff6b5f",
 };
 
@@ -88,6 +91,18 @@ type RetryResponse = {
   debug?: ApiDebug;
 };
 
+type ShareResponse = {
+  ok?: true;
+  slug: string;
+  createdAt: string;
+  debug?: ApiDebug;
+};
+
+type SharedDeckResponse = {
+  ok?: true;
+  deck: SharedDeckSnapshot;
+};
+
 type CardVersionPanel = Record<string, boolean>;
 
 type ThemeMode = "light" | "dark";
@@ -112,6 +127,16 @@ function isRetryResponse(value: unknown): value is RetryResponse {
 
 function isTweakResponse(value: unknown): value is TweakResponse {
   return isEscalateResponse(value);
+}
+
+function isShareResponse(value: unknown): value is ShareResponse {
+  return Boolean(value && typeof value === "object" && typeof (value as ShareResponse).slug === "string");
+}
+
+function isSharedDeckResponse(value: unknown): value is SharedDeckResponse {
+  if (!value || typeof value !== "object") return false;
+  const deck = (value as SharedDeckResponse).deck;
+  return Boolean(deck && typeof deck.input === "string" && Array.isArray(deck.cards));
 }
 
 function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
@@ -255,12 +280,21 @@ function appendCardVersion(card: ComplimentCardType, version: ComplimentCardVers
   return [...versionsForCard(card), version].slice(-MAX_CARD_VERSIONS);
 }
 
+function activeVersionIdFor(card: ComplimentCardType, versions: ComplimentCardVersion[]): string | undefined {
+  if (card.activeVersionId && versions.some((version) => version.id === card.activeVersionId)) return card.activeVersionId;
+  return [...versions]
+    .reverse()
+    .find((version) => version.text === card.text && version.dramaLevel === card.dramaLevel)?.id ?? versions.at(-1)?.id;
+}
+
 function hydrateCard(card: ComplimentCardType): ComplimentCardType {
+  const versions = versionsForCard(card);
   return {
     ...card,
     status: "idle",
     copied: false,
-    versions: versionsForCard(card),
+    versions,
+    activeVersionId: activeVersionIdFor(card, versions),
   };
 }
 
@@ -398,6 +432,8 @@ function V2Card({
   const hasText = card.text.trim().length > 0;
   const bucket = bucketFor(card);
   const versions = versionsForCard(card);
+  const activeVersionId = activeVersionIdFor(card, versions);
+  const [expandedVersionIds, setExpandedVersionIds] = useState<Record<string, boolean>>({});
 
   const toolClass =
     "grid size-9 place-items-center rounded-[12px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] text-[var(--ink)] transition hover:-translate-y-0.5 hover:bg-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45";
@@ -423,53 +459,57 @@ function V2Card({
       </header>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[var(--dark-line)] py-3">
-        <button
-          aria-label={`Like ${card.personaName} compliment`}
-          aria-pressed={card.feedback === "up"}
-          className={`${toolClass} ${card.feedback === "up" ? "border-[#446100] bg-[#d4ff66] text-[#203000]" : ""}`}
-          disabled={!hasText || isLoading}
-          title="Helpful - use more of this feeling"
-          type="button"
-          onClick={() => onSetFeedback(card.id, "up")}
-        >
-          <ThumbsUp aria-hidden="true" className="size-4" />
-        </button>
-        <button
-          aria-label={`Dislike ${card.personaName} compliment`}
-          aria-pressed={card.feedback === "down"}
-          className={`${toolClass} ${card.feedback === "down" ? "border-[#ff6b5f] bg-[#ff6b5f]/15 text-[#8c2d24]" : ""}`}
-          disabled={!hasText || isLoading}
-          title="Not for me - use less of this feeling"
-          type="button"
-          onClick={() => onSetFeedback(card.id, "down")}
-        >
-          <ThumbsDown aria-hidden="true" className="size-4" />
-        </button>
-        <button
-          aria-expanded={versionsOpen}
-          aria-label={`Open ${card.personaName} version history`}
-          className={toolClass}
-          disabled={versions.length === 0 || isLoading}
-          title="Version history"
-          type="button"
-          onClick={() => onToggleVersions(card.id)}
-        >
-          <History aria-hidden="true" className="size-4" />
-        </button>
-        <button
-          aria-expanded={tweakOpen}
-          aria-label={`Tweak ${card.personaName} compliment`}
-          className={toolClass}
-          disabled={!hasText || isLoading}
-          title="Tweak this card"
-          type="button"
-          onClick={() => onToggleTweak(card.id)}
-        >
-          <SlidersHorizontal aria-hidden="true" className="size-4" />
-        </button>
+        <Tooltip label="Helpful: use more of this feeling">
+          <button
+            aria-label={`Like ${card.personaName} compliment`}
+            aria-pressed={card.feedback === "up"}
+            className={`${toolClass} ${card.feedback === "up" ? "border-[#446100] bg-[#d4ff66] text-[#203000]" : ""}`}
+            disabled={!hasText || isLoading}
+            type="button"
+            onClick={() => onSetFeedback(card.id, "up")}
+          >
+            <ThumbsUp aria-hidden="true" className="size-4" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Not for me: use less of this feeling">
+          <button
+            aria-label={`Dislike ${card.personaName} compliment`}
+            aria-pressed={card.feedback === "down"}
+            className={`${toolClass} ${card.feedback === "down" ? "border-[#ff6b5f] bg-[#ff6b5f]/15 text-[#8c2d24]" : ""}`}
+            disabled={!hasText || isLoading}
+            type="button"
+            onClick={() => onSetFeedback(card.id, "down")}
+          >
+            <ThumbsDown aria-hidden="true" className="size-4" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Version history">
+          <button
+            aria-expanded={versionsOpen}
+            aria-label={`Open ${card.personaName} version history`}
+            className={toolClass}
+            disabled={versions.length === 0 || isLoading}
+            type="button"
+            onClick={() => onToggleVersions(card.id)}
+          >
+            <History aria-hidden="true" className="size-4" />
+          </button>
+        </Tooltip>
+        <Tooltip label="Tweak this card">
+          <button
+            aria-expanded={tweakOpen}
+            aria-label={`Tweak ${card.personaName} compliment`}
+            className={toolClass}
+            disabled={!hasText || isLoading}
+            type="button"
+            onClick={() => onToggleTweak(card.id)}
+          >
+            <SlidersHorizontal aria-hidden="true" className="size-4" />
+          </button>
+        </Tooltip>
         {card.feedback ? (
-          <span className="ml-1 text-xs font-bold text-[var(--ink-muted)]">
-            {card.feedback === "up" ? "Saved as a taste signal" : "Less of this next time"}
+          <span className="ml-1 text-xs font-bold text-[var(--ink-muted)]" role="status">
+            {card.feedback === "up" ? "More of this next time" : "Less of this next time"}
           </span>
         ) : null}
       </div>
@@ -509,24 +549,41 @@ function V2Card({
               <span className="text-xs font-bold text-[var(--ink-muted)]">{versions.length} saved</span>
             </div>
             <div className="mt-3 space-y-2">
-              {[...versions].reverse().map((version, reverseIndex) => (
-                <div className="rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] p-3" key={version.id}>
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-xs font-bold uppercase text-[var(--ink-muted)]">
-                      {version.kind} · Drama {String(version.dramaLevel).padStart(2, "0")}
+              {[...versions].reverse().map((version) => {
+                const isCurrentVersion = version.id === activeVersionId;
+                const isExpanded = Boolean(expandedVersionIds[version.id]);
+                return (
+                  <div className="rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] p-3" key={version.id}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase text-[var(--ink-muted)]">
+                        {version.kind} · Drama {String(version.dramaLevel).padStart(2, "0")}
+                      </p>
+                      {isCurrentVersion ? (
+                        <span className="text-xs font-bold text-[var(--purple)]">Current</span>
+                      ) : (
+                        <button
+                          className="text-xs font-bold text-[var(--purple)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                          type="button"
+                          onClick={() => onRestoreVersion(card.id, version)}
+                        >
+                          Restore
+                        </button>
+                      )}
+                    </div>
+                    <p className={`mt-2 text-sm font-medium leading-5 text-[var(--ink-muted)] ${isExpanded ? "" : "line-clamp-3"}`}>
+                      {version.text}
                     </p>
                     <button
-                      className="text-xs font-bold text-[var(--purple)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                      disabled={version.text === card.text && version.dramaLevel === card.dramaLevel}
+                      aria-expanded={isExpanded}
+                      className="mt-2 text-xs font-bold text-[var(--ink)] underline decoration-[var(--purple)] decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
                       type="button"
-                      onClick={() => onRestoreVersion(card.id, version)}
+                      onClick={() => setExpandedVersionIds((current) => ({ ...current, [version.id]: !current[version.id] }))}
                     >
-                      {reverseIndex === 0 && version.text === card.text ? "Current" : "Restore"}
+                      {isExpanded ? "Show less" : "Read full"}
                     </button>
                   </div>
-                  <p className="mt-2 line-clamp-3 text-sm font-medium leading-5 text-[var(--ink-muted)]">{version.text}</p>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         ) : null}
@@ -648,6 +705,7 @@ export default function V2Page() {
   const [tweakCardId, setTweakCardId] = useState<string | null>(null);
   const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
   const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [examplesExpanded, setExamplesExpanded] = useState(false);
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const trimmedInput = input.trim();
@@ -671,40 +729,66 @@ export default function V2Page() {
       setDeckHistory(storedDecks);
       setTasteSignals(loadTasteSignals());
 
+      const importSharedDeck = (sharedDeck: SharedDeckSnapshot) => {
+        const createdAt = new Date().toISOString();
+        const restoredCards = sharedDeck.cards.map((card) => {
+          const text = card.text.trim();
+          const version = text ? createCardVersion(text, card.dramaLevel, "generated") : undefined;
+          return {
+            id: crypto.randomUUID(),
+            originalInput: card.originalInput || sharedDeck.input,
+            personaId: card.personaId,
+            personaName: card.personaName,
+            text,
+            history: text ? [text] : [],
+            versions: version ? [version] : [],
+            activeVersionId: version?.id,
+            dramaLevel: card.dramaLevel,
+            status: "idle" as const,
+            copied: false,
+          };
+        });
+        const deckId = crypto.randomUUID();
+        const entry: DeckHistoryEntry = {
+          id: deckId,
+          input: sharedDeck.input,
+          cards: restoredCards,
+          createdAt,
+          updatedAt: createdAt,
+        };
+        setDeckHistory(saveDeckHistory(entry));
+        setCurrentDeckId(deckId);
+        setInput(sharedDeck.input);
+        setCards(restoredCards);
+        setShareMessage("Shared deck saved to this device.");
+        const location = new URL(window.location.href);
+        location.searchParams.delete("share");
+        location.hash = "";
+        window.history.replaceState(null, "", `${location.pathname}${location.search}`);
+      };
+
+      const shareSlug = new URLSearchParams(window.location.search).get("share");
+      if (shareSlug) {
+        void (async () => {
+          try {
+            const response = await fetch(`/api/share/${encodeURIComponent(shareSlug)}`);
+            const body = (await response.json().catch(() => ({}))) as unknown;
+            if (!response.ok || !isSharedDeckResponse(body)) {
+              setShareMessage("This shared deck could not be loaded.");
+              return;
+            }
+            importSharedDeck(body.deck);
+          } catch {
+            setShareMessage("This shared deck could not be loaded.");
+          }
+        })();
+        return;
+      }
+
       const token = new URLSearchParams(window.location.hash.slice(1)).get("deck");
       const sharedDeck = token ? readShareToken(token) : null;
       if (!sharedDeck) return;
-
-      const createdAt = new Date().toISOString();
-      const restoredCards = sharedDeck.cards.map((card) => {
-        const text = card.text.trim();
-        return {
-          id: crypto.randomUUID(),
-          originalInput: card.originalInput || sharedDeck.input,
-          personaId: card.personaId,
-          personaName: card.personaName,
-          text,
-          history: text ? [text] : [],
-          versions: text ? [createCardVersion(text, card.dramaLevel, "generated")] : [],
-          dramaLevel: card.dramaLevel,
-          status: "idle" as const,
-          copied: false,
-        };
-      });
-      const deckId = crypto.randomUUID();
-      const entry: DeckHistoryEntry = {
-        id: deckId,
-        input: sharedDeck.input,
-        cards: restoredCards,
-        createdAt,
-        updatedAt: createdAt,
-      };
-      setDeckHistory(saveDeckHistory(entry));
-      setCurrentDeckId(deckId);
-      setInput(sharedDeck.input);
-      setCards(restoredCards);
-      setShareMessage("Shared deck saved to this device.");
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+      importSharedDeck(sharedDeck);
     }, 0);
 
     return () => window.clearTimeout(restoreTimer);
@@ -842,20 +926,21 @@ export default function V2Page() {
           return;
         }
 
-        const nextCards = cards.map((item) =>
-          item.id === cardId
-            ? {
-                ...item,
-                text: body.text,
-                history: body.history,
-                versions: appendCardVersion(item, createCardVersion(body.text, body.dramaLevel, "dramatic")),
-                dramaLevel: body.dramaLevel,
-                status: "idle" as const,
-                error: undefined,
-                copied: false,
-              }
-            : item,
-        );
+        const nextCards = cards.map((item) => {
+          if (item.id !== cardId) return item;
+          const version = createCardVersion(body.text, body.dramaLevel, "dramatic");
+          return {
+            ...item,
+            text: body.text,
+            history: body.history,
+            versions: appendCardVersion(item, version),
+            activeVersionId: version.id,
+            dramaLevel: body.dramaLevel,
+            status: "idle" as const,
+            error: undefined,
+            copied: false,
+          };
+        });
         setCards(nextCards);
         persistDeck(nextCards);
       } catch (error) {
@@ -898,20 +983,21 @@ export default function V2Page() {
           return;
         }
 
-        const nextCards = cards.map((item) =>
-          item.id === cardId
-            ? {
-                ...item,
-                text: body.text,
-                history: [...item.history, body.text].slice(-MAX_HISTORY_ITEMS),
-                versions: appendCardVersion(item, createCardVersion(body.text, body.dramaLevel, "generated")),
-                dramaLevel: body.dramaLevel,
-                status: "idle" as const,
-                error: undefined,
-                copied: false,
-              }
-            : item,
-        );
+        const nextCards = cards.map((item) => {
+          if (item.id !== cardId) return item;
+          const version = createCardVersion(body.text, body.dramaLevel, "generated");
+          return {
+            ...item,
+            text: body.text,
+            history: [...item.history, body.text].slice(-MAX_HISTORY_ITEMS),
+            versions: appendCardVersion(item, version),
+            activeVersionId: version.id,
+            dramaLevel: body.dramaLevel,
+            status: "idle" as const,
+            error: undefined,
+            copied: false,
+          };
+        });
         setCards(nextCards);
         persistDeck(nextCards);
       } catch (error) {
@@ -962,20 +1048,21 @@ export default function V2Page() {
           return;
         }
 
-        const nextCards = cards.map((item) =>
-          item.id === cardId
-            ? {
-                ...item,
-                text: body.text,
-                history: body.history,
-                versions: appendCardVersion(item, createCardVersion(body.text, body.dramaLevel, "tweaked")),
-                dramaLevel: body.dramaLevel,
-                status: "idle" as const,
-                error: undefined,
-                copied: false,
-              }
-            : item,
-        );
+        const nextCards = cards.map((item) => {
+          if (item.id !== cardId) return item;
+          const version = createCardVersion(body.text, body.dramaLevel, "tweaked");
+          return {
+            ...item,
+            text: body.text,
+            history: body.history,
+            versions: appendCardVersion(item, version),
+            activeVersionId: version.id,
+            dramaLevel: body.dramaLevel,
+            status: "idle" as const,
+            error: undefined,
+            copied: false,
+          };
+        });
         setCards(nextCards);
         persistDeck(nextCards);
         setTweakCardId(null);
@@ -992,7 +1079,7 @@ export default function V2Page() {
     (cardId: string, vote: FeedbackVote) => {
       const card = cards.find((item) => item.id === cardId);
       if (!card || !card.text) return;
-      const nextVote = card.feedback === vote ? undefined : vote;
+      const nextVote = nextFeedbackVote(card.feedback, vote);
       const nextCards = cards.map((item) => (item.id === cardId ? { ...item, feedback: nextVote } : item));
       setCards(nextCards);
       const deckId = persistDeck(nextCards);
@@ -1022,7 +1109,15 @@ export default function V2Page() {
     (cardId: string, version: ComplimentCardVersion) => {
       const nextCards = cards.map((item) =>
         item.id === cardId
-          ? { ...item, text: version.text, dramaLevel: version.dramaLevel, status: "idle" as const, error: undefined, copied: false }
+          ? {
+              ...item,
+              text: version.text,
+              dramaLevel: version.dramaLevel,
+              activeVersionId: version.id,
+              status: "idle" as const,
+              error: undefined,
+              copied: false,
+            }
           : item,
       );
       setCards(nextCards);
@@ -1043,11 +1138,42 @@ export default function V2Page() {
   const shareDeck = useCallback(async () => {
     const shareableCards = cards.filter((card) => card.text.trim());
     if (shareableCards.length === 0) return;
-    const token = createShareToken(shareableCards[0]?.originalInput ?? trimmedInput, shareableCards);
-    const url = `${window.location.origin}${window.location.pathname}#deck=${token}`;
+
+    const payload = {
+      input: shareableCards[0]?.originalInput ?? trimmedInput,
+      cards: shareableCards.map((card) => ({
+        personaId: card.personaId,
+        personaName: card.personaName,
+        text: card.text,
+        dramaLevel: card.dramaLevel,
+        originalInput: card.originalInput,
+      })),
+    };
+    const startedAt = performance.now();
     try {
+      const response = await fetch("/api/share", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json().catch(() => ({}))) as unknown;
+      logApiExchange({
+        endpoint: "POST /api/share",
+        payload: { input: payload.input, cardCount: payload.cards.length },
+        status: response.status,
+        ok: response.ok && isShareResponse(body),
+        body,
+        startedAt,
+      });
+      if (!response.ok || !isShareResponse(body)) {
+        setShareMessage("The share link could not be created. Try again.");
+        return;
+      }
+
+      const url = `${window.location.origin}/deck/${body.slug}`;
+      const shareText = `A three-voice HypeForge compliment deck for ${payload.input}.`;
       if (navigator.share) {
-        await navigator.share({ title: "HypeForge compliment deck", text: "A compliment deck made for you.", url });
+        await navigator.share({ title: `${payload.input} has a HypeForge deck`, text: shareText, url });
         setShareMessage("Share sheet opened.");
       } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(url);
@@ -1058,6 +1184,7 @@ export default function V2Page() {
       }
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return;
+      logApiExchange({ endpoint: "POST /api/share", payload: { input: payload.input, cardCount: payload.cards.length }, startedAt, error });
       setShareMessage("Share link could not be copied.");
     }
   }, [cards, trimmedInput]);
@@ -1129,49 +1256,54 @@ export default function V2Page() {
             <p className="v2-mono hidden text-right text-[0.68rem] uppercase text-[var(--text-muted)] sm:block">
               Private saved decks · no sign-in
             </p>
-            <button
-              aria-label="Open compliment guide"
-              className="hidden size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 min-[380px]:grid"
-              title="Compliment guide"
-              type="button"
-              onClick={() => setGuideOpen(true)}
-            >
-              <BookOpen aria-hidden="true" className="size-4" />
-            </button>
-            <button
-              aria-label="Open saved compliment decks"
-              className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
-              title="Saved compliment decks"
-              type="button"
-              onClick={() => setHistoryOpen(true)}
-            >
-              <History aria-hidden="true" className="size-4" />
-              <span className="hidden sm:inline">Saved</span>
-            </button>
-            {cards.some((card) => card.text.trim()) ? (
+            <Tooltip className="hidden min-[380px]:inline-flex" label="Compliment guide">
               <button
-                aria-label="Share this compliment deck"
+                aria-label="Open compliment guide"
                 className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                title="Share this deck"
                 type="button"
-                onClick={shareDeck}
+                onClick={() => setGuideOpen(true)}
               >
-                <Share2 aria-hidden="true" className="size-4" />
+                <BookOpen aria-hidden="true" className="size-4" />
               </button>
+            </Tooltip>
+            <Tooltip label="Saved compliment decks">
+              <button
+                aria-label="Open saved compliment decks"
+                className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+              >
+                <History aria-hidden="true" className="size-4" />
+                <span className="hidden sm:inline">Saved</span>
+              </button>
+            </Tooltip>
+            {cards.some((card) => card.text.trim()) ? (
+              <Tooltip label="Create a share link">
+                <button
+                  aria-label="Share this compliment deck"
+                  className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                  type="button"
+                  onClick={shareDeck}
+                >
+                  <Share2 aria-hidden="true" className="size-4" />
+                </button>
+              </Tooltip>
             ) : null}
-            <button
-              aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-              className="inline-flex min-h-10 items-center gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-              type="button"
-              onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
-            >
-              {theme === "light" ? (
-                <Moon aria-hidden="true" className="size-4" />
-              ) : (
-                <Sun aria-hidden="true" className="size-4" />
-              )}
-              <span className="hidden sm:inline">{theme === "light" ? "Dark" : "Light"}</span>
-            </button>
+            <Tooltip label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}>
+              <button
+                aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+                className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
+                type="button"
+                onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+              >
+                {theme === "light" ? (
+                  <Moon aria-hidden="true" className="size-4" />
+                ) : (
+                  <Sun aria-hidden="true" className="size-4" />
+                )}
+                <span className="hidden sm:inline">{theme === "light" ? "Dark" : "Light"}</span>
+              </button>
+            </Tooltip>
           </div>
         </div>
       </header>
@@ -1223,17 +1355,27 @@ export default function V2Page() {
               </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {EXAMPLES.map((example) => (
-                <button
-                  className="min-h-10 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[#8b5cf6]/70 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:text-sm"
-                  key={example}
-                  type="button"
-                  onClick={() => setInput(example)}
-                >
-                  {example}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                {(examplesExpanded ? EXAMPLES : EXAMPLES.slice(0, 3)).map((example) => (
+                  <button
+                    className="min-h-10 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:border-[#8b5cf6]/70 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:text-sm"
+                    key={example}
+                    type="button"
+                    onClick={() => setInput(example)}
+                  >
+                    {example}
+                  </button>
+                ))}
+              </div>
+              <button
+                aria-expanded={examplesExpanded}
+                className="text-xs font-bold text-[var(--purple)] underline decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                type="button"
+                onClick={() => setExamplesExpanded((current) => !current)}
+              >
+                {examplesExpanded ? "Show fewer ideas" : `Show ${EXAMPLES.length - 3} more ideas`}
+              </button>
             </div>
 
             <button
@@ -1338,7 +1480,12 @@ export default function V2Page() {
 
       <footer className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm font-semibold text-[var(--text-faint)] sm:px-6 lg:px-8">
         <p className="v2-gradient-text v2-display text-lg font-semibold">HypeForge</p>
-        <p>Built for playful praise. No account needed.</p>
+        <div className="flex items-center gap-4">
+          <Link className="text-[var(--text-muted)] underline decoration-[var(--purple)] decoration-2 underline-offset-4 transition hover:text-[var(--text)]" href="/compliment-guide">
+            Compliment guide
+          </Link>
+          <p>Built for playful praise. No account needed.</p>
+        </div>
       </footer>
 
       <DeckHistoryDrawer

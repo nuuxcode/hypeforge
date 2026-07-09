@@ -1,6 +1,7 @@
 "use client";
 
 import { HeartHandshake, X } from "lucide-react";
+import { Tooltip } from "@/components/tooltip";
 
 export function ComplimentGuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
@@ -19,15 +20,16 @@ export function ComplimentGuideDialog({ open, onClose }: { open: boolean; onClos
               <h2 className="v2-display mt-1 text-2xl font-semibold text-[var(--text)]">Give praise that lands</h2>
             </div>
           </div>
-          <button
-            aria-label="Close compliment guide"
-            className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-            title="Close"
-            type="button"
-            onClick={onClose}
-          >
-            <X aria-hidden="true" className="size-4" />
-          </button>
+          <Tooltip label="Close guide">
+            <button
+              aria-label="Close compliment guide"
+              className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+              type="button"
+              onClick={onClose}
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
         </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">

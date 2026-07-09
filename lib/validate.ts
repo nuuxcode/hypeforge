@@ -46,6 +46,22 @@ export const TweakBodySchema = z.object({
   feedback: z.string().min(3).max(240),
 });
 
+export const ShareDeckBodySchema = z.object({
+  input: z.string().min(MIN_INPUT_LENGTH).max(MAX_INPUT_LENGTH),
+  cards: z
+    .array(
+      z.object({
+        personaId: z.string().min(1).max(80),
+        personaName: z.string().min(1).max(100),
+        text: z.string().min(24).max(MAX_COMPLIMENT_LENGTH),
+        dramaLevel: z.number().int().min(1).max(20),
+        originalInput: z.string().max(MAX_INPUT_LENGTH),
+      }),
+    )
+    .min(1)
+    .max(3),
+});
+
 export function sanitizeInput(value: string): string {
   const normalized = value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
   if (!normalized) {

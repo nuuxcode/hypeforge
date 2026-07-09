@@ -13,7 +13,9 @@ TBD
 - "Make it more dramatic" escalates only the selected card, using its own prior versions
 - Copy to clipboard with per-card confirmation and fallback copy support
 - Intentional loading, friendly errors, and mobile-first layout
-- `/v2` alternate UI using the premium drama-meter design system
+- `/v2` premium workspace with saved decks, per-card version history, tweak notes, and light taste signals
+- Clean share links at `/deck/<short-id>` with a public, readable deck page
+- Crawlable compliment guide, metadata, Open Graph image, JSON-LD, `robots.txt`, and sitemap
 
 ## Tech Stack
 
@@ -33,7 +35,9 @@ Each card stores the current text, public compliment history, persona id, drama 
 cp .env.example .env.local
 ```
 
-Set `GEMINI_API_KEY` and `RATELIMIT_SECRET`. HypeForge has no local/internal text generator fallback; every compliment comes from Gemini. If Gemini quota is exhausted, the app shows a friendly error and logs the real provider details server-side. Keep `.env.local` out of git.
+Set `HYPEFORGE_GEMINI_API_KEY` and `RATELIMIT_SECRET`. Set `NEXT_PUBLIC_SITE_URL` to the deployed public origin so canonical URLs, sitemap entries, and social metadata point to the real site. HypeForge has no local/internal text generator fallback; every compliment comes from Gemini. If Gemini quota is exhausted, the app shows a friendly error and logs the real provider details server-side. Keep `.env.local` out of git.
+
+Shared decks use a local JSON store by default at `.data/hypeforge-shares.json`. For deployment, set `HYPEFORGE_SHARE_STORE_PATH` to a mounted persistent disk path. Shared deck pages are intentionally `noindex`: they get good link previews without making a recipient's praise searchable.
 
 ## Run Locally
 
@@ -42,7 +46,7 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000. This workspace is currently running on port 3001.
 
 ## Checks
 
@@ -53,6 +57,6 @@ pnpm test
 pnpm build
 ```
 
-## Future Improvements
+## Sharing
 
-Shareable image export, persona picker, voting to learn which voice lands best, and Slack/LinkedIn share formats.
+The share button creates a short URL such as `/deck/a1b2c3d4`, rather than placing the whole compliment deck in the address bar. The recipient can read it immediately or save a copy to their own HypeForge workspace.
