@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { GET } from "@/app/api/share/[slug]/route";
 import { POST } from "@/app/api/share/route";
+import { COMPLIANT_GUIDELINES, COMPLIANT_TEXT } from "@/tests/fixtures/guidelines";
 
 let temporaryDirectory = "";
 
@@ -28,9 +29,10 @@ describe("shared decks", () => {
             {
               personaId: "epic-bard",
               personaName: "Epic Bard",
-              text: "You turn every customer concern into a calm, confident success story with remarkable grace.",
+              text: COMPLIANT_TEXT,
               dramaLevel: 2,
               originalInput: "Customer Success Manager",
+              guidelines: COMPLIANT_GUIDELINES,
             },
           ],
         }),
@@ -49,7 +51,8 @@ describe("shared decks", () => {
 
     expect(readResponse.status).toBe(200);
     expect(read.deck.input).toBe("Customer Success Manager");
-    expect(read.deck.cards[0].text).toContain("calm, confident success story");
+    expect(read.deck.cards[0].text).toContain("cosmic air-traffic controller");
+    expect(read.deck.cards[0].guidelines).toEqual(COMPLIANT_GUIDELINES);
   });
 
   it("rejects invalid shared-deck payloads", async () => {

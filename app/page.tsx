@@ -34,7 +34,8 @@ function isEscalateResponse(value: unknown): value is EscalateResponse {
       typeof value === "object" &&
       typeof (value as EscalateResponse).text === "string" &&
       Array.isArray((value as EscalateResponse).history) &&
-      typeof (value as EscalateResponse).dramaLevel === "number",
+      typeof (value as EscalateResponse).dramaLevel === "number" &&
+      Boolean((value as EscalateResponse).guidelines),
   );
 }
 
@@ -281,6 +282,7 @@ export default function Page() {
                   text: body.text,
                   history: body.history,
                   dramaLevel: body.dramaLevel,
+                  guidelines: body.guidelines,
                   status: "idle",
                   error: undefined,
                   copied: false,

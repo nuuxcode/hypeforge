@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { CSSProperties } from "react";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { notFound } from "next/navigation";
+import { GuidelineProof } from "@/components/guideline-proof";
 import { getSharedDeck } from "@/lib/shared-decks";
 
 const accents = ["#7050c8", "#168a87", "#cc5046"];
@@ -60,6 +61,7 @@ export default async function SharedDeckPage({ params }: { params: Promise<{ slu
                 <p className="v2-mono text-xs uppercase text-[var(--ink-muted)]">{card.personaName}</p>
                 <p className="v2-mono mt-2 text-xs uppercase" style={{ color: accents[index % accents.length] }}>Drama {String(card.dramaLevel).padStart(2, "0")}</p>
                 <p className="v2-display mt-7 text-lg font-semibold leading-7 text-[var(--ink)]">{card.text}</p>
+                <GuidelineProof className="mt-5" guidelines={card.guidelines} />
               </article>
             ))}
           </div>

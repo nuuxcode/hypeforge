@@ -1,4 +1,5 @@
-import { generateCompliment, providerErrorMessage } from "@/lib/ai";
+import { providerErrorMessage } from "@/lib/ai";
+import { generateCompliantCompliment, isGuidelineComplianceError } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { getPersona } from "@/lib/personas";
 import { buildTweakMessages } from "@/lib/prompts";
@@ -95,8 +96,8 @@ export async function POST(req: Request) {
 
   try {
     debug.providerInfo("tweak generation started", { personaId: persona.id, personaName: persona.name });
-    const text = await generateCompliment(
-      buildTweakMessages({
+    const result = await generateCompliantCompliment({
+      messages: buildTweakMessages({
         persona,
         originalInput,
         currentText,
@@ -104,13 +105,28 @@ export async function POST(req: Request) {
         dramaLevel: body.data.dramaLevel,
         feedback,
       }),
-      { temperature: 1, maxOutputTokens: 160 },
-    );
-    debug.providerInfo("tweak generation succeeded", { personaId: persona.id, characterCount: text.length });
+      subject: originalInput,
+      personaId: persona.id,
+      operation: "tweak",
+      debug,
+      temperature: 1,
+      maxOutputTokens: 260,
+    });
+    debug.providerInfo("tweak generation succeeded", {
+      personaId: persona.id,
+      characterCount: result.text.length,
+      wordCount: result.guidelines.wordCount,
+    });
 
     return Response.json(
       withDebug(
-        { ok: true, text, history: appendHistory(history, text), dramaLevel: body.data.dramaLevel },
+        {
+          ok: true,
+          text: result.text,
+          history: appendHistory(history, result.text),
+          dramaLevel: body.data.dramaLevel,
+          guidelines: result.guidelines,
+        },
         debug.finish(),
       ),
       {
@@ -124,7 +140,10 @@ export async function POST(req: Request) {
   } catch (error) {
     debug.providerError("tweak generation failed", error);
     return Response.json(
-      withDebug({ ok: false, error: providerErrorMessage(error) }, debug.finish()),
+      withDebug(
+        { ok: false, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error) },
+        debug.finish(),
+      ),
       { headers: { "Set-Cookie": setCookie } },
     );
   }

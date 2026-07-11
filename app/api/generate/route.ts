@@ -1,4 +1,8 @@
-import { generateCompliment, isQuotaError, providerErrorMessage } from "@/lib/ai";
+import { providerErrorMessage } from "@/lib/ai";
+import {
+  generateCompliantCompliment,
+  isGuidelineComplianceError,
+} from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { pickOnePerBucket } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
@@ -27,71 +31,59 @@ async function generateForPersona(
   input: string,
   preference: SoftPreferenceContext,
   debug: ReturnType<typeof createApiDebug>,
-): Promise<string> {
+): Promise<Pick<ComplimentCard, "text" | "guidelines">> {
   const messages = buildInitialMessages(persona, input, preference);
   debug.providerInfo("persona generation started", {
     personaId: persona.id,
     personaName: persona.name,
   });
   try {
-    const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 150 });
+    const result = await generateCompliantCompliment({
+      messages,
+      subject: input,
+      personaId: persona.id,
+      operation: "generate",
+      debug,
+      temperature: 1,
+      maxOutputTokens: 260,
+    });
     debug.providerInfo("persona generation succeeded", {
       personaId: persona.id,
       personaName: persona.name,
-      characterCount: text.length,
+      characterCount: result.text.length,
+      wordCount: result.guidelines.wordCount,
     });
-    return text;
+    return result;
   } catch (error) {
     debug.providerError("persona generation failed", {
       personaId: persona.id,
       personaName: persona.name,
       error,
     });
-    if (isQuotaError(error)) {
-      debug.providerInfo("skipping retry: provider quota exhausted, retry would fail too", {
-        personaId: persona.id,
-        personaName: persona.name,
-      });
-      throw error;
-    }
-    debug.providerInfo("retrying persona generation once", {
-      personaId: persona.id,
-      personaName: persona.name,
-    });
-    try {
-      const text = await generateCompliment(messages, { temperature: 1, maxOutputTokens: 150 });
-      debug.providerInfo("persona retry succeeded", {
-        personaId: persona.id,
-        personaName: persona.name,
-        characterCount: text.length,
-      });
-      return text;
-    } catch (retryError) {
-      debug.providerError("persona retry failed", {
-        personaId: persona.id,
-        personaName: persona.name,
-        error: retryError,
-      });
-      throw retryError;
-    }
+    throw error;
   }
 }
 
-function makeCard(persona: Persona, input: string, text: string): ComplimentCard {
+function makeCard(
+  persona: Persona,
+  input: string,
+  result: Pick<ComplimentCard, "text" | "guidelines">,
+): ComplimentCard {
   return {
     id: crypto.randomUUID(),
     originalInput: input,
     personaId: persona.id,
     personaName: persona.name,
-    text,
-    history: [text],
+    text: result.text,
+    history: [result.text],
+    guidelines: result.guidelines,
     dramaLevel: 1,
     status: "idle",
     copied: false,
   };
 }
 
-function makeFailedCard(persona: Persona, input: string): ComplimentCard {
+function makeFailedCard(persona: Persona, input: string, error: unknown): ComplimentCard {
   return {
     id: crypto.randomUUID(),
     originalInput: input,
@@ -102,7 +94,9 @@ function makeFailedCard(persona: Persona, input: string): ComplimentCard {
     dramaLevel: 1,
     status: "error",
     copied: false,
-    error: "The compliment engine got overwhelmed by your brilliance. Try again.",
+    error: isGuidelineComplianceError(error)
+      ? error.message
+      : "The compliment engine got overwhelmed by your brilliance. Try again.",
   };
 }
 
@@ -175,7 +169,7 @@ export async function POST(req: Request) {
   );
 
   const cards = settled.map((result, index) =>
-    result.status === "fulfilled" ? result.value : makeFailedCard(selected[index]!, input),
+    result.status === "fulfilled" ? result.value : makeFailedCard(selected[index]!, input, result.reason),
   );
   debug.info("persona settlement complete", {
     successCount: cards.filter((card) => card.status === "idle").length,
@@ -188,7 +182,17 @@ export async function POST(req: Request) {
       reason: result.status === "rejected" ? result.reason : undefined,
     })));
     return Response.json(
-      withDebug({ ok: false, error: providerErrorMessage(settled[0]?.status === "rejected" ? settled[0].reason : undefined), cards }, debug.finish()),
+      withDebug(
+        {
+          ok: false,
+          error:
+            settled[0]?.status === "rejected" && isGuidelineComplianceError(settled[0].reason)
+              ? settled[0].reason.message
+              : providerErrorMessage(settled[0]?.status === "rejected" ? settled[0].reason : undefined),
+          cards,
+        },
+        debug.finish(),
+      ),
       { headers: { "Set-Cookie": setCookie } },
     );
   }

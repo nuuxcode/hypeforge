@@ -21,7 +21,7 @@ export type TasteSignal = {
 export type SharedDeckSnapshot = {
   input: string;
   cards: Array<
-    Pick<ComplimentCard, "personaId" | "personaName" | "text" | "dramaLevel" | "originalInput">
+    Pick<ComplimentCard, "personaId" | "personaName" | "text" | "dramaLevel" | "originalInput" | "guidelines">
   >;
 };
 
@@ -155,6 +155,7 @@ export function createShareToken(input: string, cards: ComplimentCard[]): string
         text: card.text,
         dramaLevel: card.dramaLevel,
         originalInput: card.originalInput,
+        guidelines: card.guidelines,
       })),
   };
   return toBase64Url(JSON.stringify(deck));
@@ -174,7 +175,8 @@ export function readShareToken(token: string): SharedDeckSnapshot | null {
           typeof card.personaId !== "string" ||
           typeof card.personaName !== "string" ||
           typeof card.text !== "string" ||
-          typeof card.dramaLevel !== "number",
+          typeof card.dramaLevel !== "number" ||
+          (card.guidelines !== undefined && (!card.guidelines || typeof card.guidelines !== "object")),
       )
     ) {
       return null;

@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/retry/route";
-import { generateCompliment } from "@/lib/ai";
+import { generateCompliantCompliment } from "@/lib/compliant-generation";
 
-vi.mock("@/lib/ai", () => ({
-  generateCompliment: vi.fn(async () => "This person is a blazing comet of competence with excellent timing."),
-  providerErrorMessage: () => "The compliment engine got overwhelmed by your brilliance. Try again.",
-}));
+vi.mock("@/lib/compliant-generation", async () => {
+  const { COMPLIANT_RESULT } = await import("@/tests/fixtures/guidelines");
+  return {
+    generateCompliantCompliment: vi.fn(async () => COMPLIANT_RESULT),
+    isGuidelineComplianceError: (error: unknown) =>
+      error instanceof Error && error.name === "GuidelineComplianceError",
+  };
+});
 
 describe("POST /api/retry", () => {
   beforeEach(() => {
@@ -24,10 +28,11 @@ describe("POST /api/retry", () => {
 
     expect(response.status).toBe(200);
     expect(body.ok).toBe(true);
-    expect(body.text).toContain("blazing comet");
+    expect(body.text).toContain("cosmic air-traffic controller");
     expect(body.history).toEqual([body.text]);
     expect(body.dramaLevel).toBe(1);
-    expect(generateCompliment).toHaveBeenCalledTimes(1);
+    expect(body.guidelines.checks).toHaveLength(8);
+    expect(generateCompliantCompliment).toHaveBeenCalledTimes(1);
   });
 
   it("rejects unknown personas before model calls", async () => {
@@ -42,6 +47,6 @@ describe("POST /api/retry", () => {
     expect(response.status).toBe(200);
     expect(body.ok).toBe(false);
     expect(body.error).toContain("Invalid compliment persona");
-    expect(generateCompliment).not.toHaveBeenCalled();
+    expect(generateCompliantCompliment).not.toHaveBeenCalled();
   });
 });

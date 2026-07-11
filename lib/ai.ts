@@ -1,6 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { generateText, type ModelMessage } from "ai";
-import { cleanModelText, validateCompliment } from "./safeText";
+import { generateText, Output, type ModelMessage } from "ai";
+import { GuidelineModelOutputSchema, type GuidelineModelOutput } from "./compliment-guidelines";
 
 let googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
 
@@ -72,10 +72,10 @@ function combinedModelError(args: {
   return error;
 }
 
-export async function generateCompliment(
+export async function generateGuidelineCandidate(
   messages: ModelMessage[],
   options: { temperature?: number; maxOutputTokens?: number } = {},
-): Promise<string> {
+): Promise<GuidelineModelOutput> {
   const google = getGoogleClient();
   const { main, backup } = getModelIds();
   const prompt = splitSystemMessages(messages);
@@ -93,13 +93,17 @@ export async function generateCompliment(
           thinkingConfig: { thinkingBudget: 0 },
         },
       },
+      output: Output.object({
+        schema: GuidelineModelOutputSchema,
+        name: "company_compliment",
+        description: "A guideline-compliant workplace compliment with exact rule evidence.",
+      }),
     });
     if (result.finishReason === "length") {
       throw new Error("Model output was truncated.");
     }
-    const text = cleanModelText(result.text);
-    validateCompliment(text);
-    return text;
+    if (!result.output) throw new Error("Model returned no structured compliment output.");
+    return result.output;
   };
 
   try {

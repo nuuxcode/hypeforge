@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { ComplimentGuideDialog } from "@/components/compliment-guide-dialog";
 import { DeckHistoryDrawer } from "@/components/deck-history-drawer";
+import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
 import {
   buildSoftPreferenceContext,
@@ -53,6 +54,7 @@ import type {
   EscalateResponse,
   FeedbackVote,
   GenerateResponse,
+  GuidelineCompliance,
   PersonaBucket,
   TweakResponse,
 } from "@/lib/types";
@@ -93,6 +95,7 @@ type RetryResponse = {
   text: string;
   history: string[];
   dramaLevel: number;
+  guidelines: GuidelineCompliance;
   debug?: ApiDebug;
 };
 
@@ -116,13 +119,27 @@ function isGenerateResponse(value: unknown): value is GenerateResponse {
   return Boolean(value && typeof value === "object" && Array.isArray((value as GenerateResponse).cards));
 }
 
+function isGuidelineCompliance(value: unknown): value is GuidelineCompliance {
+  if (!value || typeof value !== "object") return false;
+  const compliance = value as GuidelineCompliance;
+  return (
+    compliance.version === "2.1" &&
+    typeof compliance.wordCount === "number" &&
+    compliance.wordCount <= 40 &&
+    Array.isArray(compliance.checks) &&
+    compliance.checks.length === 8 &&
+    compliance.checks.every((item) => item.state === "pass")
+  );
+}
+
 function isEscalateResponse(value: unknown): value is EscalateResponse {
   return Boolean(
     value &&
       typeof value === "object" &&
       typeof (value as EscalateResponse).text === "string" &&
       Array.isArray((value as EscalateResponse).history) &&
-      typeof (value as EscalateResponse).dramaLevel === "number",
+      typeof (value as EscalateResponse).dramaLevel === "number" &&
+      isGuidelineCompliance((value as EscalateResponse).guidelines),
   );
 }
 
@@ -263,6 +280,7 @@ function createCardVersion(
   text: string,
   dramaLevel: number,
   kind: ComplimentCardVersion["kind"],
+  guidelines?: GuidelineCompliance,
 ): ComplimentCardVersion {
   return {
     id: crypto.randomUUID(),
@@ -270,6 +288,7 @@ function createCardVersion(
     dramaLevel,
     kind,
     createdAt: new Date().toISOString(),
+    guidelines,
   };
 }
 
@@ -277,7 +296,12 @@ function versionsForCard(card: ComplimentCardType): ComplimentCardVersion[] {
   if (card.versions?.length) return card.versions;
   const versions = card.history.length > 0 ? card.history : card.text ? [card.text] : [];
   return versions.map((text, index) =>
-    createCardVersion(text, index === 0 ? 1 : Math.min(card.dramaLevel, index + 1), index === 0 ? "generated" : "dramatic"),
+    createCardVersion(
+      text,
+      index === 0 ? 1 : Math.min(card.dramaLevel, index + 1),
+      index === 0 ? "generated" : "dramatic",
+      text === card.text ? card.guidelines : undefined,
+    ),
   );
 }
 
@@ -294,12 +318,15 @@ function activeVersionIdFor(card: ComplimentCardType, versions: ComplimentCardVe
 
 function hydrateCard(card: ComplimentCardType): ComplimentCardType {
   const versions = versionsForCard(card);
+  const activeVersionId = activeVersionIdFor(card, versions);
+  const activeVersion = versions.find((version) => version.id === activeVersionId);
   return {
     ...card,
     status: "idle",
     copied: false,
     versions,
-    activeVersionId: activeVersionIdFor(card, versions),
+    activeVersionId,
+    guidelines: activeVersion?.guidelines,
   };
 }
 
@@ -562,9 +589,12 @@ function V2Card({
       <div className="mt-5 space-y-6">
         <div className="space-y-4">
           {hasText ? (
-            <p aria-live="polite" className="v2-display text-base font-semibold leading-6 text-[var(--ink)] sm:text-[1.05rem]">
-              {card.text}
-            </p>
+            <>
+              <p aria-live="polite" className="v2-display text-base font-semibold leading-6 text-[var(--ink)] sm:text-[1.05rem]">
+                {card.text}
+              </p>
+              <GuidelineProof guidelines={card.guidelines} />
+            </>
           ) : (
             <div className="rounded-[18px] border border-dashed border-[var(--dark-line)] bg-[var(--paper-secondary)] p-4">
               <p className="text-sm font-bold leading-6 text-[var(--ink-muted)]">
@@ -617,6 +647,11 @@ function V2Card({
                     </div>
                     <p className={`mt-2 text-sm font-medium leading-5 text-[var(--ink-muted)] ${isExpanded ? "" : "line-clamp-3"}`}>
                       {version.text}
+                    </p>
+                    <p className="mt-2 text-xs font-bold text-[var(--ink-muted)]">
+                      {version.guidelines
+                        ? `Guidelines v${version.guidelines.version} · ${version.guidelines.checks.filter((item) => item.state === "pass").length}/8 · ${version.guidelines.wordCount}/40 words`
+                        : "Generated before Guidelines v2.1 · Not verified"}
                     </p>
                     <button
                       aria-expanded={isExpanded}
@@ -782,7 +817,9 @@ export default function V2Page() {
         const createdAt = new Date().toISOString();
         const restoredCards = sharedDeck.cards.map((card) => {
           const text = card.text.trim();
-          const version = text ? createCardVersion(text, card.dramaLevel, "generated") : undefined;
+          const version = text
+            ? createCardVersion(text, card.dramaLevel, "generated", card.guidelines)
+            : undefined;
           return {
             id: crypto.randomUUID(),
             originalInput: card.originalInput || sharedDeck.input,
@@ -795,6 +832,7 @@ export default function V2Page() {
             dramaLevel: card.dramaLevel,
             status: "idle" as const,
             copied: false,
+            guidelines: card.guidelines,
           };
         });
         const deckId = crypto.randomUUID();
@@ -1005,7 +1043,7 @@ export default function V2Page() {
 
         const nextCards = cards.map((item) => {
           if (item.id !== cardId) return item;
-          const version = createCardVersion(body.text, body.dramaLevel, "dramatic");
+          const version = createCardVersion(body.text, body.dramaLevel, "dramatic", body.guidelines);
           return {
             ...item,
             text: body.text,
@@ -1013,6 +1051,7 @@ export default function V2Page() {
             versions: appendCardVersion(item, version),
             activeVersionId: version.id,
             dramaLevel: body.dramaLevel,
+            guidelines: body.guidelines,
             status: "idle" as const,
             error: undefined,
             copied: false,
@@ -1062,7 +1101,7 @@ export default function V2Page() {
 
         const nextCards = cards.map((item) => {
           if (item.id !== cardId) return item;
-          const version = createCardVersion(body.text, body.dramaLevel, "generated");
+          const version = createCardVersion(body.text, body.dramaLevel, "generated", body.guidelines);
           return {
             ...item,
             text: body.text,
@@ -1070,6 +1109,7 @@ export default function V2Page() {
             versions: appendCardVersion(item, version),
             activeVersionId: version.id,
             dramaLevel: body.dramaLevel,
+            guidelines: body.guidelines,
             status: "idle" as const,
             error: undefined,
             copied: false,
@@ -1127,7 +1167,7 @@ export default function V2Page() {
 
         const nextCards = cards.map((item) => {
           if (item.id !== cardId) return item;
-          const version = createCardVersion(body.text, body.dramaLevel, "tweaked");
+          const version = createCardVersion(body.text, body.dramaLevel, "tweaked", body.guidelines);
           return {
             ...item,
             text: body.text,
@@ -1135,6 +1175,7 @@ export default function V2Page() {
             versions: appendCardVersion(item, version),
             activeVersionId: version.id,
             dramaLevel: body.dramaLevel,
+            guidelines: body.guidelines,
             status: "idle" as const,
             error: undefined,
             copied: false,
@@ -1190,6 +1231,7 @@ export default function V2Page() {
               ...item,
               text: version.text,
               dramaLevel: version.dramaLevel,
+              guidelines: version.guidelines,
               activeVersionId: version.id,
               status: "idle" as const,
               error: undefined,
@@ -1225,6 +1267,7 @@ export default function V2Page() {
         text: card.text,
         dramaLevel: card.dramaLevel,
         originalInput: card.originalInput,
+        guidelines: card.guidelines,
       })),
     };
     const startedAt = performance.now();

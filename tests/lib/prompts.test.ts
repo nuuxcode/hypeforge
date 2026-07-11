@@ -10,9 +10,12 @@ describe("prompts", () => {
     const messages = buildInitialMessages(persona!, "Founding Engineer");
 
     expect(messages[0]?.content).toContain("Epic Bard");
+    expect(messages[0]?.content).toContain("Company Compliment Style Guidelines");
+    expect(messages[0]?.content).toContain("Never reference physical appearance");
     expect(messages[1]?.content).toContain("Founding Engineer");
-    expect(messages[1]?.content).toContain("exactly 2 compact sentences");
-    expect(messages[1]?.content).toContain("Output only the compliment text");
+    expect(messages[1]?.content).toContain("Hard maximum: 40 words");
+    expect(messages[1]?.content).toContain("structured object");
+    expect(messages[1]?.content).not.toContain("220 to 360 characters");
   });
 
   it("uses feedback as a soft, non-copying taste signal", () => {
@@ -42,7 +45,8 @@ describe("prompts", () => {
     expect(messages[1]?.content).toContain("They make hiring pipelines feel like victory parades.");
     expect(messages[1]?.content).toContain("Do not reuse exact metaphors");
     expect(messages[1]?.content).toContain("No markdown");
-    expect(messages[1]?.content).toContain("Exactly 2 compact sentences");
-    expect(messages[1]?.content).not.toContain("40%");
+    expect(messages[1]?.content).toContain("never exceed 40 words");
+    expect(messages[1]?.content).toContain("structured object");
+    expect(messages[1]?.content).not.toContain("220 to 360 characters");
   });
 });

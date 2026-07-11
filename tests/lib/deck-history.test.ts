@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildSoftPreferenceContext, createShareToken, nextFeedbackVote, readShareToken, type TasteSignal } from "@/lib/deck-history";
 import type { ComplimentCard } from "@/lib/types";
+import { COMPLIANT_GUIDELINES } from "@/tests/fixtures/guidelines";
 
 const card: ComplimentCard = {
   id: "card-1",
@@ -12,6 +13,7 @@ const card: ComplimentCard = {
   dramaLevel: 2,
   status: "idle",
   copied: false,
+  guidelines: COMPLIANT_GUIDELINES,
 };
 
 const signals: TasteSignal[] = [
@@ -58,6 +60,7 @@ describe("deck history helpers", () => {
           text: card.text,
           dramaLevel: 2,
           originalInput: "Customer Success Manager",
+          guidelines: COMPLIANT_GUIDELINES,
         },
       ],
     });

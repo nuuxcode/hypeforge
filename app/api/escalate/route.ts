@@ -1,4 +1,5 @@
-import { generateCompliment, providerErrorMessage } from "@/lib/ai";
+import { providerErrorMessage } from "@/lib/ai";
+import { generateCompliantCompliment, isGuidelineComplianceError } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { getPersona } from "@/lib/personas";
 import { buildEscalationMessages } from "@/lib/prompts";
@@ -115,29 +116,36 @@ export async function POST(req: Request) {
       personaName: persona.name,
       dramaLevel: body.data.dramaLevel,
     });
-    const text = await generateCompliment(
-      buildEscalationMessages({
+    const result = await generateCompliantCompliment({
+      messages: buildEscalationMessages({
         persona,
         originalInput,
         currentText,
         history,
         dramaLevel: body.data.dramaLevel,
       }),
-      { temperature: 1.05, maxOutputTokens: 160 },
-    );
+      subject: originalInput,
+      personaId: persona.id,
+      operation: "escalate",
+      debug,
+      temperature: 1.05,
+      maxOutputTokens: 260,
+    });
     debug.providerInfo("escalation generation succeeded", {
       personaId: persona.id,
       personaName: persona.name,
-      characterCount: text.length,
+      characterCount: result.text.length,
+      wordCount: result.guidelines.wordCount,
     });
 
     return Response.json(
       withDebug(
         {
           ok: true,
-          text,
-          history: appendHistory(history, text),
+          text: result.text,
+          history: appendHistory(history, result.text),
           dramaLevel: body.data.dramaLevel + 1,
+          guidelines: result.guidelines,
         },
         debug.finish(),
       ),
@@ -152,7 +160,10 @@ export async function POST(req: Request) {
   } catch (error) {
     debug.providerError("escalation generation failed", error);
     return Response.json(
-      withDebug({ ok: false, error: providerErrorMessage(error) }, debug.finish()),
+      withDebug(
+        { ok: false, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error) },
+        debug.finish(),
+      ),
       { headers: { "Set-Cookie": setCookie } },
     );
   }

@@ -3,6 +3,7 @@
 import { Check, Copy, LoaderCircle, WandSparkles } from "lucide-react";
 import type { ComplimentCard as ComplimentCardType } from "@/lib/types";
 import { DramaBadge } from "./DramaBadge";
+import { GuidelineProof } from "./guideline-proof";
 
 type ComplimentCardProps = {
   card: ComplimentCardType;
@@ -49,7 +50,10 @@ export function ComplimentCard({ card, onCopy, onEscalate }: ComplimentCardProps
       <div className="mt-5 flex flex-1 flex-col justify-between gap-5">
         <div className="space-y-3">
           {hasText ? (
-            <p className="text-lg font-bold leading-8 text-neutral-950">{card.text}</p>
+            <>
+              <p className="text-lg font-bold leading-8 text-neutral-950">{card.text}</p>
+              <GuidelineProof guidelines={card.guidelines} />
+            </>
           ) : (
             <p className="rounded-[8px] border border-dashed border-neutral-300 bg-neutral-50 p-4 text-sm font-bold leading-6 text-neutral-600">
               {card.error ?? "This persona needs another run before it can properly overreact."}

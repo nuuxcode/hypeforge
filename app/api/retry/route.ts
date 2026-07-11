@@ -1,4 +1,5 @@
-import { generateCompliment, providerErrorMessage } from "@/lib/ai";
+import { providerErrorMessage } from "@/lib/ai";
+import { generateCompliantCompliment, isGuidelineComplianceError } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { getPersona } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
@@ -88,18 +89,33 @@ export async function POST(req: Request) {
       personaId: persona.id,
       personaName: persona.name,
     });
-    const text = await generateCompliment(buildInitialMessages(persona, originalInput), {
+    const result = await generateCompliantCompliment({
+      messages: buildInitialMessages(persona, originalInput),
+      subject: originalInput,
+      personaId: persona.id,
+      operation: "retry",
+      debug,
       temperature: 1,
-      maxOutputTokens: 150,
+      maxOutputTokens: 260,
     });
     debug.providerInfo("persona retry generation succeeded", {
       personaId: persona.id,
       personaName: persona.name,
-      characterCount: text.length,
+      characterCount: result.text.length,
+      wordCount: result.guidelines.wordCount,
     });
 
     return Response.json(
-      withDebug({ ok: true, text, history: [text], dramaLevel: 1 }, debug.finish()),
+      withDebug(
+        {
+          ok: true,
+          text: result.text,
+          history: [result.text],
+          dramaLevel: 1,
+          guidelines: result.guidelines,
+        },
+        debug.finish(),
+      ),
       {
         headers: {
           "Set-Cookie": setCookie,
@@ -111,7 +127,10 @@ export async function POST(req: Request) {
   } catch (error) {
     debug.providerError("persona retry generation failed", error);
     return Response.json(
-      withDebug({ ok: false, error: providerErrorMessage(error) }, debug.finish()),
+      withDebug(
+        { ok: false, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error) },
+        debug.finish(),
+      ),
       { headers: { "Set-Cookie": setCookie } },
     );
   }

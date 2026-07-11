@@ -19,6 +19,12 @@ describe("sanitizeInput", () => {
     );
   });
 
+  it("requires a role or function for guideline grounding", () => {
+    expect(() => sanitizeInput("Sara")).toThrow("job title");
+    expect(sanitizeInput("Recruiter")).toBe("Recruiter");
+    expect(sanitizeInput("Sara who fixes every crisis")).toBe("Sara who fixes every crisis");
+  });
+
   it("keeps preference signals small and rejects prompt-like entries", () => {
     expect(
       cleanPreferenceContext({

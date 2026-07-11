@@ -6,12 +6,43 @@ export type FeedbackVote = "up" | "down";
 
 export type CardVersionKind = "generated" | "dramatic" | "tweaked";
 
+export type GuidelineRuleId =
+  | "no-appearance"
+  | "job-function"
+  | "absurd-metaphor"
+  | "made-up-statistic"
+  | "max-40-words"
+  | "no-literally"
+  | "no-public-figure"
+  | "workplace-appropriate";
+
+export type RuleCheckState = "pass" | "fail" | "unverified";
+
+export type RuleCheckSource = "code" | "evidence" | "heuristic" | "model";
+
+export type RuleCheck = {
+  id: GuidelineRuleId;
+  label: string;
+  state: RuleCheckState;
+  source: RuleCheckSource;
+  note?: string;
+  evidence?: string;
+};
+
+export type GuidelineCompliance = {
+  version: "2.1";
+  wordCount: number;
+  checks: RuleCheck[];
+  verifiedAt: string;
+};
+
 export type ComplimentCardVersion = {
   id: string;
   text: string;
   dramaLevel: number;
   kind: CardVersionKind;
   createdAt: string;
+  guidelines?: GuidelineCompliance;
 };
 
 export type SoftPreferenceContext = {
@@ -40,6 +71,7 @@ export type ComplimentCard = {
   feedback?: FeedbackVote;
   versions?: ComplimentCardVersion[];
   activeVersionId?: string;
+  guidelines?: GuidelineCompliance;
 };
 
 export type ApiDebugEvent = {
@@ -69,6 +101,7 @@ export type EscalateResponse = {
   text: string;
   history: string[];
   dramaLevel: number;
+  guidelines: GuidelineCompliance;
   debug?: ApiDebug;
 };
 
@@ -77,6 +110,7 @@ export type TweakResponse = {
   text: string;
   history: string[];
   dramaLevel: number;
+  guidelines: GuidelineCompliance;
   debug?: ApiDebug;
 };
 

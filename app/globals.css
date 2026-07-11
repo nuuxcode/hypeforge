@@ -11,6 +11,16 @@ html, body {
   -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+  --paper: #fffdf8;
+  --paper-secondary: #f2eadf;
+  --ink: #111015;
+  --ink-muted: #514b58;
+  --dark-line: rgba(17, 16, 21, 0.2);
+  --control-hover: #f6efe6;
+  --coral: #ff6b5f;
+}
+
 body {
   background:
     linear-gradient(rgba(21, 21, 21, 0.045) 1px, transparent 1px),

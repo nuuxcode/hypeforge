@@ -2,6 +2,8 @@ import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { MAX_COMPLIMENT_LENGTH } from "./safeText";
+import { VerifiedGuidelineComplianceSchema } from "./compliment-guidelines";
+import type { GuidelineCompliance } from "./types";
 import { MAX_INPUT_LENGTH } from "./validate";
 
 export type SharedDeckCard = {
@@ -10,6 +12,7 @@ export type SharedDeckCard = {
   text: string;
   dramaLevel: number;
   originalInput: string;
+  guidelines?: GuidelineCompliance;
 };
 
 export type SharedDeckSnapshot = {
@@ -57,7 +60,15 @@ function normalizeSnapshot(snapshot: SharedDeckSnapshot): SharedDeckSnapshot {
     if (!Number.isInteger(card.dramaLevel) || card.dramaLevel < 1 || card.dramaLevel > 20) {
       throw new Error("The shared deck contains an invalid drama level.");
     }
-    return { personaId, personaName, text, dramaLevel: card.dramaLevel, originalInput: originalInput || input };
+    const guidelines = card.guidelines ? VerifiedGuidelineComplianceSchema.parse(card.guidelines) : undefined;
+    return {
+      personaId,
+      personaName,
+      text,
+      dramaLevel: card.dramaLevel,
+      originalInput: originalInput || input,
+      guidelines,
+    };
   });
 
   return { input, cards };

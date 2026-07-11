@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MAX_COMPLIMENT_LENGTH } from "./safeText";
+import { hasFunctionContext, VerifiedGuidelineComplianceSchema } from "./compliment-guidelines";
 import type { SoftPreferenceContext } from "./types";
 
 export const MIN_INPUT_LENGTH = 3;
@@ -56,6 +57,7 @@ export const ShareDeckBodySchema = z.object({
         text: z.string().min(24).max(MAX_COMPLIMENT_LENGTH),
         dramaLevel: z.number().int().min(1).max(20),
         originalInput: z.string().max(MAX_INPUT_LENGTH),
+        guidelines: VerifiedGuidelineComplianceSchema.optional(),
       }),
     )
     .min(1)
@@ -75,6 +77,9 @@ export function sanitizeInput(value: string): string {
   }
   if (INJECTION_PATTERNS.some((pattern) => pattern.test(normalized))) {
     throw new Error("That looks more like instructions than a person. Try a name, role, or short description.");
+  }
+  if (!hasFunctionContext(normalized)) {
+    throw new Error("Add the person's job title or what they do so every compliment can name their function.");
   }
   return normalized;
 }
