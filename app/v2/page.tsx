@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   BookOpen,
   Check,
+  ChevronDown,
+  ChevronUp,
   Copy,
   History,
   Layers3,
@@ -434,6 +436,9 @@ function V2Card({
   const bucket = bucketFor(card);
   const versions = versionsForCard(card);
   const activeVersionId = activeVersionIdFor(card, versions);
+  const activeVersionIndex = Math.max(versions.findIndex((version) => version.id === activeVersionId), 0);
+  const earlierVersion = versions[activeVersionIndex - 1];
+  const laterVersion = versions[activeVersionIndex + 1];
   const [expandedVersionIds, setExpandedVersionIds] = useState<Record<string, boolean>>({});
 
   const toolClass =
@@ -454,9 +459,45 @@ function V2Card({
             {bucket}
           </p>
         </div>
-        <span className="v2-mono inline-flex h-9 shrink-0 items-center rounded-full border border-[var(--dark-line)] bg-[var(--paper-secondary)] px-3 text-xs font-bold text-[var(--ink)]">
-          {badgeLabel(card.dramaLevel)}
-        </span>
+        <div
+          aria-label={`${badgeLabel(card.dramaLevel)}, version ${activeVersionIndex + 1} of ${versions.length}`}
+          className="v2-mono inline-flex h-9 shrink-0 items-stretch overflow-hidden rounded-full border border-[var(--dark-line)] bg-[var(--paper-secondary)] text-xs font-bold text-[var(--ink)]"
+          role="group"
+        >
+          <Tooltip align="end" label="View earlier version">
+            <button
+              aria-label={
+                earlierVersion
+                  ? `View earlier ${card.personaName} version, drama ${String(earlierVersion.dramaLevel).padStart(2, "0")}`
+                  : `No earlier ${card.personaName} version is available`
+              }
+              className="grid h-9 w-8 place-items-center border-r border-[var(--dark-line)] transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+              disabled={!earlierVersion || isLoading}
+              type="button"
+              onClick={() => earlierVersion && onRestoreVersion(card.id, earlierVersion)}
+            >
+              <ChevronDown aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
+          <span aria-hidden="true" className="inline-flex items-center px-2.5">
+            {badgeLabel(card.dramaLevel)}
+          </span>
+          <Tooltip align="end" label="View later version">
+            <button
+              aria-label={
+                laterVersion
+                  ? `View later ${card.personaName} version, drama ${String(laterVersion.dramaLevel).padStart(2, "0")}`
+                  : `No later ${card.personaName} version is available`
+              }
+              className="grid h-9 w-8 place-items-center border-l border-[var(--dark-line)] transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+              disabled={!laterVersion || isLoading}
+              type="button"
+              onClick={() => laterVersion && onRestoreVersion(card.id, laterVersion)}
+            >
+              <ChevronUp aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
+        </div>
       </header>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[var(--dark-line)] py-3">
