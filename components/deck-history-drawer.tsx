@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, History, RotateCcw, Search, Trash2, X } from "lucide-react";
+import { ArrowUpRight, BookOpen, History, RotateCcw, Search, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Tooltip } from "@/components/tooltip";
 import type { DeckHistoryEntry } from "@/lib/deck-history";
@@ -131,15 +131,22 @@ export function DeckHistoryDrawer({
             <div className="space-y-3">
               {filtered.map((entry) => (
                 <article
-                  className="relative rounded-[18px] border border-[var(--line)] bg-[var(--panel-raised)] p-4 pr-12"
+                  className="group relative rounded-[18px] border border-[var(--line)] bg-[var(--panel-raised)] p-4 pr-12 transition hover:-translate-y-0.5 hover:border-[var(--purple)] hover:bg-[var(--control-hover)] hover:shadow-lg hover:shadow-black/10 focus-within:border-[var(--purple)] focus-within:shadow-lg focus-within:shadow-black/10"
                   key={entry.id}
                 >
                   <button
-                    className="block w-full text-left focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                    aria-label={`Open saved deck for ${entry.input}`}
+                    className="block w-full cursor-pointer rounded-[12px] text-left focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
                     type="button"
                     onClick={() => onRestore(entry)}
                   >
-                    <p className="v2-display line-clamp-2 text-base font-semibold text-[var(--text)]">{entry.input}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="v2-display line-clamp-2 text-base font-semibold text-[var(--text)]">{entry.input}</p>
+                      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-bold text-[var(--purple)] transition group-hover:translate-x-0.5">
+                        Open
+                        <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                      </span>
+                    </div>
                     <p className="mt-1 text-xs font-bold text-[var(--text-faint)]">
                       {entry.cards.length} voices · {timeLabel(entry.updatedAt)}
                     </p>
