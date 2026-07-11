@@ -27,8 +27,10 @@ import { DeckHistoryDrawer } from "@/components/deck-history-drawer";
 import { Tooltip } from "@/components/tooltip";
 import {
   buildSoftPreferenceContext,
+  clearActiveDeckId,
   clearDeckHistory,
   clearTasteSignals,
+  loadActiveDeckId,
   loadDeckHistory,
   loadTasteSignals,
   nextFeedbackVote,
@@ -36,6 +38,7 @@ import {
   removeDeckHistory,
   removeTasteSignal,
   saveDeckHistory,
+  saveActiveDeckId,
   saveTasteSignal,
   type DeckHistoryEntry,
   type SharedDeckSnapshot,
@@ -766,6 +769,10 @@ export default function V2Page() {
   }, []);
 
   useEffect(() => {
+    if (currentDeckId && cards.length > 0) saveActiveDeckId(currentDeckId);
+  }, [cards.length, currentDeckId]);
+
+  useEffect(() => {
     const restoreTimer = window.setTimeout(() => {
       const storedDecks = loadDeckHistory();
       setDeckHistory(storedDecks);
@@ -799,6 +806,7 @@ export default function V2Page() {
           updatedAt: createdAt,
         };
         setDeckHistory(saveDeckHistory(entry));
+        saveActiveDeckId(deckId);
         setCurrentDeckId(deckId);
         setInput(sharedDeck.input);
         setCards(restoredCards);
@@ -829,8 +837,21 @@ export default function V2Page() {
 
       const token = new URLSearchParams(window.location.hash.slice(1)).get("deck");
       const sharedDeck = token ? readShareToken(token) : null;
-      if (!sharedDeck) return;
-      importSharedDeck(sharedDeck);
+      if (sharedDeck) {
+        importSharedDeck(sharedDeck);
+        return;
+      }
+
+      const activeDeckId = loadActiveDeckId();
+      const activeDeck = activeDeckId ? storedDecks.find((entry) => entry.id === activeDeckId) : undefined;
+      if (!activeDeck) {
+        if (activeDeckId) clearActiveDeckId();
+        return;
+      }
+
+      setInput(activeDeck.input);
+      setCards(hydrateCards(activeDeck.cards));
+      setCurrentDeckId(activeDeck.id);
     }, 0);
 
     return () => window.clearTimeout(restoreTimer);
@@ -849,6 +870,7 @@ export default function V2Page() {
         updatedAt: now,
       };
       setDeckHistory(saveDeckHistory(entry));
+      saveActiveDeckId(deckId);
       setCurrentDeckId(deckId);
       return deckId;
     },
@@ -1184,6 +1206,7 @@ export default function V2Page() {
   const restoreDeck = useCallback((entry: DeckHistoryEntry) => {
     setInput(entry.input);
     setCards(hydrateCards(entry.cards));
+    saveActiveDeckId(entry.id);
     setCurrentDeckId(entry.id);
     setGlobalError(null);
     setHistoryOpen(false);
@@ -1246,6 +1269,7 @@ export default function V2Page() {
 
   const clearSavedDecks = useCallback(() => {
     clearDeckHistory();
+    clearActiveDeckId();
     setDeckHistory([]);
     setCurrentDeckId(null);
   }, []);
@@ -1472,6 +1496,7 @@ export default function V2Page() {
                 type="button"
                 onClick={() => {
                   setCards([]);
+                  clearActiveDeckId();
                   setCurrentDeckId(null);
                   setGlobalError(null);
                   setShareMessage(null);

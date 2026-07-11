@@ -29,6 +29,7 @@ export const MAX_DECK_HISTORY = 50;
 const MAX_TASTE_SIGNALS = 30;
 const DECK_HISTORY_KEY = "hypeforge_v2_deck_history";
 const TASTE_SIGNAL_KEY = "hypeforge_v2_taste_signals";
+const ACTIVE_DECK_KEY = "hypeforge_v2_active_deck";
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -72,6 +73,22 @@ export function removeDeckHistory(id: string): DeckHistoryEntry[] {
 export function clearDeckHistory(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(DECK_HISTORY_KEY);
+}
+
+export function loadActiveDeckId(): string | null {
+  const value = read<unknown>(ACTIVE_DECK_KEY, null);
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+export function saveActiveDeckId(id: string): void {
+  const value = id.trim();
+  if (!value) return;
+  write(ACTIVE_DECK_KEY, value);
+}
+
+export function clearActiveDeckId(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(ACTIVE_DECK_KEY);
 }
 
 export function loadTasteSignals(): TasteSignal[] {
