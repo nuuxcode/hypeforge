@@ -30,6 +30,7 @@ describe("POST /api/tweak", () => {
           history: [currentText],
           dramaLevel: 2,
           feedback: "Make it warmer and a little shorter.",
+          deliveryMode: "public",
         }),
       }),
     );
@@ -42,6 +43,9 @@ describe("POST /api/tweak", () => {
     expect(body.dramaLevel).toBe(2);
     expect(body.guidelines.checks).toHaveLength(8);
     expect(generateCompliantCompliment).toHaveBeenCalledTimes(1);
+    expect(generateCompliantCompliment).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryMode: "public" }),
+    );
   });
 
   it("rejects prompt-like feedback before calling the model", async () => {

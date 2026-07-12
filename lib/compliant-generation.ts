@@ -6,9 +6,21 @@ import {
   verifyGuidelineOutput,
 } from "./compliment-guidelines";
 import type { createApiDebug } from "./debug";
-import type { GuidelineCompliance } from "./types";
+import type { DeliveryMode, GuidelineCompliance } from "./types";
 
 type DebugLogger = ReturnType<typeof createApiDebug>;
+const SECOND_PERSON_PATTERN = /\b(?:you|your|yours|yourself|you're|you've|you'll|you\u2019re|you\u2019ve|you\u2019ll)\b/i;
+
+function deliveryModeFailure(text: string, mode: DeliveryMode): string | undefined {
+  const hasSecondPerson = SECOND_PERSON_PATTERN.test(text);
+  if (mode === "direct" && !hasSecondPerson) {
+    return 'delivery-mode: direct messages must address the recipient with "you" or "your"';
+  }
+  if (mode === "public" && hasSecondPerson) {
+    return 'delivery-mode: public posts must describe the person without addressing them as "you" or "your"';
+  }
+  return undefined;
+}
 
 export class GuidelineComplianceError extends Error {
   readonly guidelines?: GuidelineCompliance;
@@ -61,6 +73,7 @@ export async function generateCompliantCompliment(args: {
   temperature?: number;
   maxOutputTokens?: number;
   previousText?: string;
+  deliveryMode?: DeliveryMode;
 }): Promise<{ text: string; guidelines: GuidelineCompliance }> {
   if (!hasFunctionContext(args.subject) && args.subject.trim().split(/\s+/).length < 2) {
     throw new GuidelineComplianceError("Add the person's job title or what they do so every compliment can name their function.");
@@ -96,11 +109,12 @@ export async function generateCompliantCompliment(args: {
         args.operation === "escalate" && semantic?.meaningfullyMoreDramatic === false
           ? "dramatic-escalation: the revision was not meaningfully more dramatic than the previous version"
           : undefined;
+      const modeFailure = deliveryModeFailure(verified.text, args.deliveryMode ?? "direct");
       args.debug.providerInfo("guideline validation completed", {
         operation: args.operation,
         personaId: args.personaId,
         attempt,
-        accepted: verified.passed && !dramaticFailure,
+        accepted: verified.passed && !dramaticFailure && !modeFailure,
         wordCount: verified.guidelines.wordCount,
         failedRuleIds: failures.map((item) => item.id),
         failures: failures.map((item) => ({
@@ -111,14 +125,17 @@ export async function generateCompliantCompliment(args: {
         })),
         semanticNotes: semantic?.notes,
         dramaticFailure,
+        modeFailure,
       });
 
-      if (verified.passed && !dramaticFailure) return { text: verified.text, guidelines: verified.guidelines };
+      if (verified.passed && !dramaticFailure && !modeFailure) {
+        return { text: verified.text, guidelines: verified.guidelines };
+      }
       repair = repairInstruction({
         subject: args.subject,
         previousText: verified.text,
         guidelines: verified.guidelines,
-        extraFailures: dramaticFailure ? [dramaticFailure] : undefined,
+        extraFailures: [dramaticFailure, modeFailure].filter((item): item is string => Boolean(item)),
       });
     } catch (error) {
       args.debug.providerError("guideline generation attempt failed", {

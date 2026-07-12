@@ -1,7 +1,8 @@
 "use client";
 
-import { Settings2, X } from "lucide-react";
+import { Settings2, Volume2, X } from "lucide-react";
 import { Tooltip } from "@/components/tooltip";
+import { saveSoundEnabled, useSoundEnabled } from "@/lib/forge-sound";
 import { saveProofStyle, useProofStyle, type ProofHeadlineStyle } from "@/lib/proof-style";
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 
@@ -21,6 +22,7 @@ const OPTIONS: Array<{ value: ProofHeadlineStyle; title: string; description: st
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialogRef = useDialogFocus<HTMLElement>(open, onClose);
   const current = useProofStyle();
+  const soundEnabled = useSoundEnabled();
   if (!open) return null;
 
   return (
@@ -39,7 +41,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
             </div>
             <div>
               <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Settings</p>
-              <h2 className="v2-display mt-1 text-2xl font-semibold text-[var(--text)]" id="settings-title">Compliance badge</h2>
+              <h2 className="v2-display mt-1 text-2xl font-semibold text-[var(--text)]" id="settings-title">Experience settings</h2>
             </div>
           </div>
           <Tooltip align="end" label="Close settings">
@@ -54,8 +56,28 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </Tooltip>
         </div>
 
+        <div className="mt-6 flex items-center justify-between gap-4 rounded-[18px] border border-[var(--line)] bg-[var(--panel-raised)] p-4">
+          <div className="flex min-w-0 items-start gap-3">
+            <Volume2 aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-[var(--accent)]" />
+            <div>
+              <p className="text-sm font-bold text-[var(--text)]">Sound effects</p>
+              <p className="mt-1 text-sm font-medium leading-5 text-[var(--text-muted)]">Subtle cues when the forge starts and a new version lands.</p>
+            </div>
+          </div>
+          <button
+            aria-checked={soundEnabled}
+            aria-label="Sound effects"
+            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)] ${soundEnabled ? "bg-[var(--accent)]" : "bg-[var(--muted-fill-strong)]"}`}
+            role="switch"
+            type="button"
+            onClick={() => saveSoundEnabled(!soundEnabled)}
+          >
+            <span className={`absolute left-1 top-1 size-5 rounded-full bg-white shadow-sm transition-transform ${soundEnabled ? "translate-x-5" : "translate-x-0"}`} />
+          </button>
+        </div>
+
         <fieldset className="mt-6 space-y-3">
-          <legend className="sr-only">Compliance badge headline style</legend>
+          <legend className="mb-3 text-sm font-bold text-[var(--text)]">Compliance badge</legend>
           {OPTIONS.map((option) => (
             <label
               className={`flex cursor-pointer items-start gap-3 rounded-[18px] border p-4 transition ${

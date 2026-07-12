@@ -21,7 +21,7 @@ describe("POST /api/retry", () => {
     const response = await POST(
       new Request("http://localhost/api/retry", {
         method: "POST",
-        body: JSON.stringify({ personaId: "epic-bard", originalInput: "Founding Engineer" }),
+        body: JSON.stringify({ personaId: "epic-bard", originalInput: "Founding Engineer", deliveryMode: "public" }),
       }),
     );
     const body = await response.json();
@@ -33,6 +33,9 @@ describe("POST /api/retry", () => {
     expect(body.dramaLevel).toBe(1);
     expect(body.guidelines.checks).toHaveLength(8);
     expect(generateCompliantCompliment).toHaveBeenCalledTimes(1);
+    expect(generateCompliantCompliment).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryMode: "public" }),
+    );
   });
 
   it("rejects unknown personas before model calls", async () => {

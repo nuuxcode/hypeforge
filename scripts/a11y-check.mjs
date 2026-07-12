@@ -30,6 +30,9 @@ try {
   await desktop.waitForTimeout(250);
   await audit("generator desktop dark", desktop, "main");
   await desktop.getByRole("button", { name: "Switch to light mode" }).click();
+  await desktop.getByRole("button", { name: "Open settings" }).click();
+  await audit("experience settings dialog", desktop, '[role="dialog"]');
+  await desktop.keyboard.press("Escape");
   await desktop.getByRole("button", { name: "Open compliment guide" }).click();
   await audit("compliment guide dialog", desktop, '[role="dialog"]');
 
@@ -50,5 +53,5 @@ if (violations.length > 0) {
   console.error(JSON.stringify({ ok: false, violations }, null, 2));
   process.exitCode = 1;
 } else {
-  console.log(JSON.stringify({ ok: true, audited: 5 }, null, 2));
+  console.log(JSON.stringify({ ok: true, audited: 6 }, null, 2));
 }

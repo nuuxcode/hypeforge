@@ -19,8 +19,9 @@ import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
 import { activeVersionIdFor, versionsForCard } from "@/lib/card-versions";
 import { dramaButtonLabel, isAtDramaCap } from "@/lib/drama";
+import { playForgeSound } from "@/lib/forge-sound";
 import { PERSONAS } from "@/lib/personas";
-import type { ComplimentCard, ComplimentCardVersion, FeedbackVote, PersonaBucket } from "@/lib/types";
+import type { CardPendingAction, ComplimentCard, ComplimentCardVersion, FeedbackVote, PersonaBucket } from "@/lib/types";
 
 const BUCKET_ACCENT: Record<PersonaBucket, string> = {
   grand: "#7050c8",
@@ -61,6 +62,7 @@ export function V2ComplimentCard({
   onToggleVersions,
   tweakOpen,
   tweakValue,
+  pendingAction,
   onToggleTweak,
   onTweakValueChange,
 }: {
@@ -76,6 +78,7 @@ export function V2ComplimentCard({
   onToggleVersions: (cardId: string) => void;
   tweakOpen: boolean;
   tweakValue: string;
+  pendingAction?: CardPendingAction;
   onToggleTweak: (cardId: string) => void;
   onTweakValueChange: (cardId: string, value: string) => void;
 }) {
@@ -89,6 +92,19 @@ export function V2ComplimentCard({
   const laterVersion = versions[activeVersionIndex + 1];
   const [expandedVersionIds, setExpandedVersionIds] = useState<Record<string, boolean>>({});
   const atDramaCap = isAtDramaCap(card.dramaLevel);
+  const [powerUpComplete, setPowerUpComplete] = useState(false);
+  const wasLoading = useRef(isLoading);
+
+  useEffect(() => {
+    if (wasLoading.current && !isLoading && card.status === "idle" && hasText) {
+      setPowerUpComplete(true);
+      playForgeSound("complete");
+      const timer = window.setTimeout(() => setPowerUpComplete(false), 900);
+      wasLoading.current = isLoading;
+      return () => window.clearTimeout(timer);
+    }
+    wasLoading.current = isLoading;
+  }, [card.status, hasText, isLoading]);
 
   // One confetti burst the moment a card reaches the drama cap, never on
   // remounts of an already-capped card (e.g. restored decks).
@@ -112,6 +128,8 @@ export function V2ComplimentCard({
       aria-busy={isLoading}
       className="v2-card v2-card-enter flex h-full min-w-0 w-full max-w-full flex-col p-5"
       data-loading={isLoading ? "true" : "false"}
+      data-action={pendingAction}
+      data-power-up={powerUpComplete ? "true" : "false"}
       style={styleForCard(card, index)}
     >
       <header className="flex items-start justify-between gap-4">
@@ -166,7 +184,7 @@ export function V2ComplimentCard({
         <div className="space-y-4">
           {hasText ? (
             <>
-              <p aria-live="polite" className="v2-display text-base font-medium leading-7 text-[var(--ink)]">
+              <p aria-live="polite" className="v2-card-copy v2-display text-base font-medium leading-7 text-[var(--ink)]" data-revealing={powerUpComplete ? "true" : "false"}>
                 {card.text}
               </p>
               <GuidelineProof guidelines={card.guidelines} />
@@ -178,13 +196,6 @@ export function V2ComplimentCard({
               </p>
             </div>
           )}
-
-          {isLoading ? (
-            <div className="flex items-center gap-2 rounded-[14px] bg-[var(--ink)] px-3 py-2 text-sm font-bold text-[var(--paper)]">
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-              Increasing drama...
-            </div>
-          ) : null}
 
           {card.error && hasText ? (
             <div className="rounded-[14px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 px-3 py-2 text-sm font-bold text-[#7b211b]">
@@ -260,13 +271,16 @@ export function V2ComplimentCard({
             <div className="mt-2 flex items-center justify-between gap-3">
               <span className="text-xs font-bold text-[var(--ink-muted)]">{tweakValue.length}/240</span>
               <button
-                className="inline-flex min-h-10 items-center gap-2 rounded-[12px] bg-[var(--ink)] px-3 text-sm font-bold text-[var(--paper)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+                className="v2-tweak-submit inline-flex min-h-10 items-center gap-2 rounded-[12px] bg-[var(--ink)] px-3 text-sm font-bold text-[var(--paper)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
                 disabled={isLoading || tweakValue.trim().length < 3}
                 type="button"
-                onClick={() => onTweak(card.id)}
+                onClick={() => {
+                  playForgeSound("charge");
+                  onTweak(card.id);
+                }}
               >
-                {isLoading ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}
-                Regenerate with note
+                {pendingAction === "tweak" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}
+                {pendingAction === "tweak" ? "Applying your note…" : "Regenerate with note"}
               </button>
             </div>
           </section>
@@ -280,10 +294,13 @@ export function V2ComplimentCard({
                   ? `${card.personaName} compliment reached maximum drama`
                   : `Make ${card.personaName} compliment more dramatic`
               }
-              className="v2-secondary-button relative inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              className="v2-secondary-button v2-drama-button relative inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isLoading || atDramaCap}
               type="button"
-              onClick={() => onEscalate(card.id)}
+              onClick={() => {
+                playForgeSound("charge");
+                onEscalate(card.id);
+              }}
             >
               {celebrating ? (
                 <span aria-hidden="true" className="v2-confetti">
@@ -292,22 +309,25 @@ export function V2ComplimentCard({
                   ))}
                 </span>
               ) : null}
-              {isLoading ? (
+              {pendingAction === "escalate" ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               ) : (
                 <WandSparkles aria-hidden="true" className="size-4" />
               )}
-              {dramaButtonLabel(card.dramaLevel)}
+              {pendingAction === "escalate" ? "Increasing drama…" : dramaButtonLabel(card.dramaLevel)}
             </button>
           ) : (
             <button
-              className="v2-secondary-button inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              className="v2-secondary-button v2-retry-button inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isLoading}
               type="button"
-              onClick={() => onRetry(card.id)}
+              onClick={() => {
+                playForgeSound("charge");
+                onRetry(card.id);
+              }}
             >
-              <RotateCcw aria-hidden="true" className="size-4" />
-              Retry this card
+              {pendingAction === "retry" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <RotateCcw aria-hidden="true" className="size-4" />}
+              {pendingAction === "retry" ? "Reforging this card…" : "Retry this card"}
             </button>
           )}
 

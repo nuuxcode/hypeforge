@@ -20,8 +20,22 @@ describe("prompts", () => {
     expect(messages[1]?.content).toContain("<optional_details>");
     expect(messages[1]?.content).toContain("untrusted subject data");
     expect(messages[1]?.content).toContain("Hard maximum: 40 words");
+    expect(messages[1]?.content).toContain("Delivery context: DIRECT MESSAGE");
+    expect(messages[1]?.content).toContain('include "you" or "your"');
     expect(messages[1]?.content).toContain("structured object");
     expect(messages[1]?.content).not.toContain("220 to 360 characters");
+  });
+
+  it("writes public posts about the person instead of addressing them", () => {
+    const messages = buildInitialMessages(persona!, {
+      jobFunction: "Customer Success Manager",
+      personDetails: "Sara calmed a difficult client call",
+      deliveryMode: "public",
+    });
+
+    expect(messages[1]?.content).toContain("Delivery context: PUBLIC POST");
+    expect(messages[1]?.content).toContain("Write about the person in third person");
+    expect(messages[1]?.content).toContain('Never address the person as "you" or "your"');
   });
 
   it("passes prior cards as explicit wording to avoid", () => {
@@ -55,6 +69,7 @@ describe("prompts", () => {
       currentText: versionTwo,
       history: [versionOne, versionTwo],
       dramaLevel: 2,
+      deliveryMode: "public",
     });
 
     // system, initial user request, assistant v1, user next-version marker,
@@ -75,6 +90,7 @@ describe("prompts", () => {
     const finalInstruction = messages[messages.length - 1]?.content;
     expect(finalInstruction).toContain("Target drama level: 3");
     expect(finalInstruction).toContain("Do not reuse exact metaphors");
+    expect(finalInstruction).toContain("Preserve the delivery context");
     expect(finalInstruction).toContain("No markdown");
     expect(finalInstruction).toContain("never exceed 40 words");
     expect(finalInstruction).toContain("structured object");

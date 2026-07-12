@@ -29,6 +29,7 @@ describe("POST /api/escalate", () => {
           currentText,
           history: [currentText],
           dramaLevel: 1,
+          deliveryMode: "public",
         }),
       }),
     );
@@ -41,7 +42,7 @@ describe("POST /api/escalate", () => {
     expect(body.guidelines).toMatchObject({ version: "2.1", wordCount: 38 });
     expect(body.guidelines.checks).toHaveLength(8);
     expect(generateCompliantCompliment).toHaveBeenCalledWith(
-      expect.objectContaining({ operation: "escalate", subject: "Customer Success Manager" }),
+      expect.objectContaining({ operation: "escalate", subject: "Customer Success Manager", deliveryMode: "public" }),
     );
   });
 

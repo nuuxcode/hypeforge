@@ -57,6 +57,23 @@ describe("generateCompliantCompliment", () => {
     expect(vi.mocked(generateGuidelineCandidate).mock.calls[1]?.[0]).toHaveLength(2);
   });
 
+  it("repairs output that uses the wrong delivery point of view", async () => {
+    const publicOutput = {
+      ...COMPLIANT_MODEL_OUTPUT,
+      text:
+        "Everyone, witness this Customer Success Manager, a cosmic air-traffic controller for client chaos whose strategy resolves 99.7% of impossible requests and turns every support queue into a perfectly choreographed victory parade across three time zones.",
+    };
+    vi.mocked(generateGuidelineCandidate)
+      .mockResolvedValueOnce(COMPLIANT_MODEL_OUTPUT)
+      .mockResolvedValueOnce(publicOutput);
+
+    const result = await generateCompliantCompliment({ ...baseArgs(), deliveryMode: "public" });
+
+    expect(result.text).not.toMatch(/\b(?:you|your)\b/i);
+    expect(generateGuidelineCandidate).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(vi.mocked(generateGuidelineCandidate).mock.calls[1]?.[0])).toContain("delivery-mode");
+  });
+
   it("fails closed after the repaired candidate remains invalid", async () => {
     const invalid = {
       ...COMPLIANT_MODEL_OUTPUT,

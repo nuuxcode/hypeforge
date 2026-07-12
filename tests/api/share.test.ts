@@ -25,6 +25,7 @@ describe("shared decks", () => {
         method: "POST",
         body: JSON.stringify({
           input: "Customer Success Manager",
+          deliveryMode: "direct",
           cards: [
             {
               personaId: "epic-bard",
@@ -32,6 +33,7 @@ describe("shared decks", () => {
               text: COMPLIANT_TEXT,
               dramaLevel: 2,
               originalInput: "Customer Success Manager",
+              deliveryMode: "direct",
               guidelines: COMPLIANT_GUIDELINES,
             },
           ],
@@ -51,6 +53,8 @@ describe("shared decks", () => {
 
     expect(readResponse.status).toBe(200);
     expect(read.deck.input).toBe("Customer Success Manager");
+    expect(read.deck.deliveryMode).toBe("direct");
+    expect(read.deck.cards[0].deliveryMode).toBe("direct");
     expect(read.deck.cards[0].text).toContain("cosmic air-traffic controller");
     expect(read.deck.cards[0].guidelines).toEqual(COMPLIANT_GUIDELINES);
   });

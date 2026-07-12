@@ -155,7 +155,7 @@ export function DeckHistoryDrawer({
                       </span>
                     </div>
                     <p className="mt-1 text-xs font-bold text-[var(--text-faint)]">
-                      {entry.cards.length} voices · {timeLabel(entry.updatedAt)}
+                      {entry.cards.length} voices · {(entry.deliveryMode ?? entry.cards[0]?.deliveryMode ?? "public") === "direct" ? "Direct" : "Public"} · {timeLabel(entry.updatedAt)}
                     </p>
                     <p className="mt-3 line-clamp-2 text-sm font-medium leading-5 text-[var(--text-muted)]">
                       {entry.cards.map((card) => card.personaName).join(" · ")}

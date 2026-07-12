@@ -1,10 +1,11 @@
-import type { ComplimentCard, FeedbackVote, SoftPreferenceContext } from "./types";
+import type { ComplimentCard, DeliveryMode, FeedbackVote, SoftPreferenceContext } from "./types";
 
 export type DeckHistoryEntry = {
   id: string;
   input: string;
   jobFunction?: string;
   personDetails?: string;
+  deliveryMode?: DeliveryMode;
   cards: ComplimentCard[];
   createdAt: string;
   updatedAt: string;
@@ -24,10 +25,11 @@ export type SharedDeckSnapshot = {
   input: string;
   jobFunction?: string;
   personDetails?: string;
+  deliveryMode?: DeliveryMode;
   cards: Array<
     Pick<
       ComplimentCard,
-      "personaId" | "personaName" | "text" | "dramaLevel" | "originalInput" | "jobFunction" | "personDetails" | "guidelines"
+      "personaId" | "personaName" | "text" | "dramaLevel" | "originalInput" | "jobFunction" | "personDetails" | "deliveryMode" | "guidelines"
     >
   >;
 };
@@ -164,6 +166,7 @@ export function readShareToken(token: string): SharedDeckSnapshot | null {
   try {
     const deck = JSON.parse(decoded) as SharedDeckSnapshot;
     if (!deck || typeof deck.input !== "string" || !Array.isArray(deck.cards) || deck.cards.length === 0) return null;
+    if (deck.deliveryMode !== undefined && deck.deliveryMode !== "direct" && deck.deliveryMode !== "public") return null;
     if (
       deck.cards.some(
         (card) =>
@@ -172,6 +175,7 @@ export function readShareToken(token: string): SharedDeckSnapshot | null {
           typeof card.personaName !== "string" ||
           typeof card.text !== "string" ||
           typeof card.dramaLevel !== "number" ||
+          (card.deliveryMode !== undefined && card.deliveryMode !== "direct" && card.deliveryMode !== "public") ||
           (card.guidelines !== undefined && (!card.guidelines || typeof card.guidelines !== "object")),
       )
     ) {

@@ -8,13 +8,13 @@ import { createApiDebug, withDebug } from "@/lib/debug";
 import { distinctnessIssues } from "@/lib/deck-distinctness";
 import { pickOnePerBucket } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
-import type { ComplimentCard, Persona } from "@/lib/types";
+import type { ComplimentCard, ComplimentSubject, DeliveryMode, Persona } from "@/lib/types";
 import { cleanPreferenceContext, GenerateBodySchema, resolveSubject } from "@/lib/validate";
 import type { SoftPreferenceContext } from "@/lib/types";
 
 async function generateForPersona(
   persona: Persona,
-  subject: { jobFunction: string; personDetails?: string },
+  subject: ComplimentSubject,
   preference: SoftPreferenceContext,
   debug: ReturnType<typeof createApiDebug>,
   avoidCompliments: string[] = [],
@@ -30,6 +30,7 @@ async function generateForPersona(
       subject: subject.jobFunction,
       personaId: persona.id,
       operation: "generate",
+      deliveryMode: subject.deliveryMode,
       debug,
       temperature: 1,
       maxOutputTokens: 260,
@@ -54,6 +55,7 @@ async function generateForPersona(
 function makeCard(
   persona: Persona,
   subject: { jobFunction: string; personDetails?: string; displayInput: string },
+  deliveryMode: DeliveryMode,
   result: Pick<ComplimentCard, "text" | "guidelines">,
 ): ComplimentCard {
   return {
@@ -61,6 +63,7 @@ function makeCard(
     originalInput: subject.displayInput,
     jobFunction: subject.jobFunction,
     personDetails: subject.personDetails,
+    deliveryMode,
     personaId: persona.id,
     personaName: persona.name,
     text: result.text,
@@ -75,6 +78,7 @@ function makeCard(
 function makeFailedCard(
   persona: Persona,
   subject: { jobFunction: string; personDetails?: string; displayInput: string },
+  deliveryMode: DeliveryMode,
   error: unknown,
 ): ComplimentCard {
   return {
@@ -82,6 +86,7 @@ function makeFailedCard(
     originalInput: subject.displayInput,
     jobFunction: subject.jobFunction,
     personDetails: subject.personDetails,
+    deliveryMode,
     personaId: persona.id,
     personaName: persona.name,
     text: "",
@@ -116,6 +121,7 @@ export async function POST(req: Request) {
   debug.info("request body parsed", {
     jobFunctionLength: (body.data.jobFunction ?? body.data.input ?? "").length,
     personDetailsLength: body.data.personDetails?.length ?? 0,
+    deliveryMode: body.data.deliveryMode,
     likedSignals: preference.liked.length,
     dislikedSignals: preference.disliked.length,
   });
@@ -169,12 +175,19 @@ export async function POST(req: Request) {
 
   const settled = await Promise.allSettled(
     selected.map(async (persona) =>
-      makeCard(persona, subject, await generateForPersona(persona, subject, preference, debug)),
+      makeCard(
+        persona,
+        subject,
+        body.data.deliveryMode,
+        await generateForPersona(persona, { ...subject, deliveryMode: body.data.deliveryMode }, preference, debug),
+      ),
     ),
   );
 
   const cards = settled.map((result, index) =>
-    result.status === "fulfilled" ? result.value : makeFailedCard(selected[index]!, subject, result.reason),
+    result.status === "fulfilled"
+      ? result.value
+      : makeFailedCard(selected[index]!, subject, body.data.deliveryMode, result.reason),
   );
 
   for (let index = 0; index < cards.length; index += 1) {
@@ -189,14 +202,26 @@ export async function POST(req: Request) {
       const replacement = makeCard(
         selected[index]!,
         subject,
-        await generateForPersona(selected[index]!, subject, preference, debug, accepted.map((item) => item.text)),
+        body.data.deliveryMode,
+        await generateForPersona(
+          selected[index]!,
+          { ...subject, deliveryMode: body.data.deliveryMode },
+          preference,
+          debug,
+          accepted.map((item) => item.text),
+        ),
       );
       const remainingIssues = distinctnessIssues(replacement, accepted);
       cards[index] = remainingIssues.length === 0
         ? replacement
-        : makeFailedCard(selected[index]!, subject, new Error(`Distinctness failed: ${remainingIssues.join(", ")}`));
+        : makeFailedCard(
+            selected[index]!,
+            subject,
+            body.data.deliveryMode,
+            new Error(`Distinctness failed: ${remainingIssues.join(", ")}`),
+          );
     } catch (error) {
-      cards[index] = makeFailedCard(selected[index]!, subject, error);
+      cards[index] = makeFailedCard(selected[index]!, subject, body.data.deliveryMode, error);
     }
   }
   debug.info("persona settlement complete", {

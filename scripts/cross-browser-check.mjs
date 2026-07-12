@@ -20,8 +20,17 @@ for (const target of targets) {
         if (message.type() === "error") consoleErrors.push(message.text());
       });
       await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
+      const directMode = page.getByRole("button", { name: "Direct" });
+      const publicMode = page.getByRole("button", { name: "Public" });
+      const directModeDefault = await directMode.getAttribute("aria-pressed") === "true";
+      await publicMode.click();
+      const publicModeSelected = await publicMode.getAttribute("aria-pressed") === "true";
       await page.getByLabel("Their job or role").fill("Product Manager");
       const generateEnabled = await page.getByRole("button", { name: "Generate 3 compliments" }).isEnabled();
+      await page.getByRole("button", { name: "Open settings" }).click();
+      const soundSwitch = page.getByRole("switch", { name: "Sound effects" });
+      const soundSettingVisible = await soundSwitch.isVisible();
+      await page.keyboard.press("Escape");
       await page.getByRole("button", { name: "Open compliment guide" }).click();
       await page.keyboard.press("Escape");
       const layout = await page.evaluate(() => ({
@@ -29,8 +38,8 @@ for (const target of targets) {
         scrollWidth: document.documentElement.scrollWidth,
         dialogs: document.querySelectorAll('[role="dialog"]').length,
       }));
-      if (!generateEnabled || layout.scrollWidth !== layout.innerWidth || layout.dialogs !== 0 || consoleErrors.length > 0) {
-        throw new Error(JSON.stringify({ generateEnabled, layout, consoleErrors }));
+      if (!directModeDefault || !publicModeSelected || !generateEnabled || !soundSettingVisible || layout.scrollWidth !== layout.innerWidth || layout.dialogs !== 0 || consoleErrors.length > 0) {
+        throw new Error(JSON.stringify({ directModeDefault, publicModeSelected, generateEnabled, soundSettingVisible, layout, consoleErrors }));
       }
       results.push({ browser: target.name, width: viewport.width, ok: true });
       await context.close();

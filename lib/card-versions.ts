@@ -51,6 +51,7 @@ export function hydrateCard(card: ComplimentCard): ComplimentCard {
   const activeVersion = versions.find((version) => version.id === activeVersionId);
   return {
     ...card,
+    deliveryMode: card.deliveryMode ?? "public",
     status: "idle",
     copied: false,
     versions,

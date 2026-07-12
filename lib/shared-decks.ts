@@ -4,7 +4,7 @@ import path from "node:path";
 import { get, put } from "@vercel/blob";
 import { MAX_COMPLIMENT_LENGTH } from "./safeText";
 import { VerifiedGuidelineComplianceSchema } from "./compliment-guidelines";
-import type { GuidelineCompliance } from "./types";
+import type { DeliveryMode, GuidelineCompliance } from "./types";
 import { MAX_INPUT_LENGTH } from "./validate";
 
 export type SharedDeckCard = {
@@ -15,6 +15,7 @@ export type SharedDeckCard = {
   originalInput: string;
   jobFunction?: string;
   personDetails?: string;
+  deliveryMode?: DeliveryMode;
   guidelines?: GuidelineCompliance;
 };
 
@@ -22,6 +23,7 @@ export type SharedDeckSnapshot = {
   input: string;
   jobFunction?: string;
   personDetails?: string;
+  deliveryMode?: DeliveryMode;
   cards: SharedDeckCard[];
 };
 
@@ -38,6 +40,10 @@ type SharedDeckStore = {
 const MAX_SHARED_DECKS = 500;
 const SLUG_PATTERN = /^[A-Za-z0-9_-]{8,20}$/;
 const BLOB_PREFIX = "hypeforge-shares";
+
+function normalizeDeliveryMode(value: unknown, fallback: DeliveryMode = "public"): DeliveryMode {
+  return value === "direct" || value === "public" ? value : fallback;
+}
 
 function usesBlobStore(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
@@ -83,6 +89,7 @@ function normalizeSnapshot(snapshot: SharedDeckSnapshot): SharedDeckSnapshot {
       originalInput: originalInput || input,
       jobFunction: card.jobFunction?.replace(/\s+/g, " ").trim() || undefined,
       personDetails: card.personDetails?.replace(/\s+/g, " ").trim() || undefined,
+      deliveryMode: normalizeDeliveryMode(card.deliveryMode),
       guidelines,
     };
   });
@@ -91,6 +98,7 @@ function normalizeSnapshot(snapshot: SharedDeckSnapshot): SharedDeckSnapshot {
     input,
     jobFunction: snapshot.jobFunction?.replace(/\s+/g, " ").trim() || cards[0]?.jobFunction,
     personDetails: snapshot.personDetails?.replace(/\s+/g, " ").trim() || cards[0]?.personDetails,
+    deliveryMode: normalizeDeliveryMode(snapshot.deliveryMode, cards[0]?.deliveryMode ?? "public"),
     cards,
   };
 }

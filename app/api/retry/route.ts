@@ -79,10 +79,11 @@ export async function POST(req: Request) {
       personaName: persona.name,
     });
     const result = await generateCompliantCompliment({
-        messages: buildInitialMessages(persona, subject),
-        subject: subject.jobFunction,
+      messages: buildInitialMessages(persona, { ...subject, deliveryMode: body.data.deliveryMode }),
+      subject: subject.jobFunction,
       personaId: persona.id,
       operation: "retry",
+      deliveryMode: body.data.deliveryMode,
       debug,
       temperature: 1,
       maxOutputTokens: 260,

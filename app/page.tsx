@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   BookOpen,
   History,
-  LoaderCircle,
   Moon,
   RotateCcw,
   Settings2,
@@ -22,6 +21,7 @@ import { V2InputPanel } from "@/components/v2-input-panel";
 import { V2ComplimentCard } from "@/components/v2-compliment-card";
 import { fetchWithTimeout } from "@/lib/client-fetch";
 import { isAtDramaCap } from "@/lib/drama";
+import { playForgeSound } from "@/lib/forge-sound";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   buildSoftPreferenceContext,
@@ -46,6 +46,8 @@ import {
 import type {
   ComplimentCard as ComplimentCardType,
   ComplimentCardVersion,
+  CardPendingAction,
+  DeliveryMode,
   FeedbackVote,
   PersonaBucket,
 } from "@/lib/types";
@@ -76,52 +78,28 @@ function preferredScrollBehavior(): ScrollBehavior {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
-const LOADING_LINES = [
-  "Writing three distinct compliments…",
-  "Adding a little wonder…",
-  "Checking every guideline…",
-] as const;
-
 type CardVersionPanel = Record<string, boolean>;
 
 type ThemeMode = "light" | "dark";
 
-function LoadingCopy() {
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = window.setInterval(() => {
-      setIndex((current) => (current + 1) % LOADING_LINES.length);
-    }, 1200);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  return (
-    <div className="flex items-center gap-3 rounded-[18px] border border-[var(--line)] bg-[var(--control-bg)] px-4 py-3 text-sm font-bold text-[var(--text)]">
-      <LoaderCircle aria-hidden="true" className="size-4 shrink-0 animate-spin text-[var(--coral)]" />
-      <span>{LOADING_LINES[index]}</span>
-    </div>
-  );
-}
-
 function LoadingPreview() {
   return (
-    <div className="space-y-4" aria-label="Creating three compliments">
-      <LoadingCopy />
+    <div className="v2-forge-preview" aria-label="Forging three compliment voices" role="status">
       <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {["grand", "mythic", "chaotic"].map((bucket) => (
+        {["grand", "mythic", "chaotic"].map((bucket, index) => (
           <div
-            className="v2-card min-h-[260px] animate-pulse p-5"
+            className="v2-card v2-forge-card min-h-[260px] p-5"
             key={bucket}
             style={
               {
                 "--bucket-accent": BUCKET_ACCENT[bucket as PersonaBucket],
                 "--heat": 0,
+                "--forge-delay": `${index * 140}ms`,
               } as CSSProperties
             }
           >
             <div className="flex items-center justify-between gap-3">
-              <div className="h-3 w-24 rounded-full bg-[var(--muted-fill-strong)]" />
+              <p className="text-xs font-semibold capitalize" style={{ color: BUCKET_ACCENT[bucket as PersonaBucket] }}>{bucket}</p>
               <div className="h-8 w-24 rounded-full bg-[var(--muted-fill-strong)]" />
             </div>
             <div className="mt-12 space-y-4">
@@ -140,6 +118,7 @@ export default function V2Page() {
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [input, setInput] = useState("");
   const [personDetails, setPersonDetails] = useState("");
+  const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("direct");
   const [cards, setCards] = useState<ComplimentCardType[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
@@ -153,7 +132,9 @@ export default function V2Page() {
   const [tweakCardId, setTweakCardId] = useState<string | null>(null);
   const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
   const [shareMessage, setShareMessage] = useState<string | null>(null);
+  const [pendingCardActions, setPendingCardActions] = useState<Record<string, CardPendingAction | undefined>>({});
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const wasGenerating = useRef(false);
 
   const trimmedInput = input.trim();
   const trimmedDetails = personDetails.trim();
@@ -172,6 +153,13 @@ export default function V2Page() {
     const timers = copyTimers.current;
     return () => Object.values(timers).forEach((timer) => clearTimeout(timer));
   }, []);
+
+  useEffect(() => {
+    if (wasGenerating.current && !isGenerating && cards.some((card) => card.text.trim())) {
+      playForgeSound("deck-complete");
+    }
+    wasGenerating.current = isGenerating;
+  }, [cards, isGenerating]);
 
   useEffect(() => {
     if (currentDeckId && cards.length > 0) saveActiveDeckId(currentDeckId);
@@ -195,6 +183,7 @@ export default function V2Page() {
             originalInput: card.originalInput || sharedDeck.input,
             jobFunction: card.jobFunction ?? sharedDeck.jobFunction ?? sharedDeck.input,
             personDetails: card.personDetails ?? sharedDeck.personDetails,
+            deliveryMode: card.deliveryMode ?? sharedDeck.deliveryMode ?? "public",
             personaId: card.personaId,
             personaName: card.personaName,
             text,
@@ -213,6 +202,7 @@ export default function V2Page() {
           input: sharedDeck.input,
           jobFunction: sharedDeck.jobFunction,
           personDetails: sharedDeck.personDetails,
+          deliveryMode: sharedDeck.deliveryMode ?? restoredCards[0]?.deliveryMode,
           cards: restoredCards,
           createdAt,
           updatedAt: createdAt,
@@ -222,6 +212,7 @@ export default function V2Page() {
         setCurrentDeckId(deckId);
         setInput(sharedDeck.jobFunction ?? sharedDeck.cards[0]?.jobFunction ?? sharedDeck.input);
         setPersonDetails(sharedDeck.personDetails ?? sharedDeck.cards[0]?.personDetails ?? "");
+        setDeliveryMode(sharedDeck.deliveryMode ?? sharedDeck.cards[0]?.deliveryMode ?? "public");
         setCards(restoredCards);
         setShareMessage("Shared deck saved to this device.");
         const location = new URL(window.location.href);
@@ -264,6 +255,7 @@ export default function V2Page() {
 
       setInput(activeDeck.jobFunction ?? activeDeck.cards[0]?.jobFunction ?? activeDeck.input);
       setPersonDetails(activeDeck.personDetails ?? activeDeck.cards[0]?.personDetails ?? "");
+      setDeliveryMode(activeDeck.deliveryMode ?? activeDeck.cards[0]?.deliveryMode ?? "public");
       setCards(hydrateCards(activeDeck.cards));
       setCurrentDeckId(activeDeck.id);
     }, 0);
@@ -281,6 +273,7 @@ export default function V2Page() {
         input: nextCards[0]?.originalInput ?? trimmedInput,
         jobFunction: nextCards[0]?.jobFunction ?? trimmedInput,
         personDetails: nextCards[0]?.personDetails ?? (trimmedDetails || undefined),
+        deliveryMode: nextCards[0]?.deliveryMode ?? deliveryMode,
         cards: nextCards.map(hydrateCard),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -290,7 +283,7 @@ export default function V2Page() {
       setCurrentDeckId(deckId);
       return deckId;
     },
-    [currentDeckId, trimmedDetails, trimmedInput],
+    [currentDeckId, deliveryMode, trimmedDetails, trimmedInput],
   );
 
   const setCardCopied = useCallback((cardId: string, copied: boolean) => {
@@ -327,6 +320,7 @@ export default function V2Page() {
     const payload = {
       jobFunction: trimmedInput,
       personDetails: trimmedDetails || undefined,
+      deliveryMode,
       preference: tasteContext,
     };
     const startedAt = performance.now();
@@ -378,7 +372,7 @@ export default function V2Page() {
     } finally {
       setIsGenerating(false);
     }
-  }, [focusDeck, isGenerating, persistDeck, tasteContext, trimmedDetails, trimmedInput]);
+  }, [deliveryMode, focusDeck, isGenerating, persistDeck, tasteContext, trimmedDetails, trimmedInput]);
 
   const escalate = useCallback(
     async (cardId: string) => {
@@ -388,12 +382,14 @@ export default function V2Page() {
       setCards((current) =>
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
+      setPendingCardActions((current) => ({ ...current, [cardId]: "escalate" }));
 
       const payload = {
         personaId: card.personaId,
         originalInput: card.originalInput,
         jobFunction: card.jobFunction,
         personDetails: card.personDetails,
+        deliveryMode: card.deliveryMode ?? "public",
         currentText: card.text,
         history: card.history,
         dramaLevel: card.dramaLevel,
@@ -446,6 +442,8 @@ export default function V2Page() {
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/escalate", payload, startedAt, error });
         setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+      } finally {
+        setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
     },
     [cards, persistDeck, setCardError],
@@ -459,12 +457,14 @@ export default function V2Page() {
       setCards((current) =>
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
+      setPendingCardActions((current) => ({ ...current, [cardId]: "retry" }));
 
       const payload = {
         personaId: card.personaId,
         originalInput: card.originalInput,
         jobFunction: card.jobFunction,
         personDetails: card.personDetails,
+        deliveryMode: card.deliveryMode ?? "public",
       };
       const startedAt = performance.now();
       try {
@@ -509,6 +509,8 @@ export default function V2Page() {
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/retry", payload, startedAt, error });
         setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+      } finally {
+        setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
     },
     [cards, persistDeck, setCardError],
@@ -523,12 +525,14 @@ export default function V2Page() {
       setCards((current) =>
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
+      setPendingCardActions((current) => ({ ...current, [cardId]: "tweak" }));
 
       const payload = {
         personaId: card.personaId,
         originalInput: card.originalInput,
         jobFunction: card.jobFunction,
         personDetails: card.personDetails,
+        deliveryMode: card.deliveryMode ?? "public",
         currentText: card.text,
         history: card.history,
         dramaLevel: card.dramaLevel,
@@ -579,6 +583,8 @@ export default function V2Page() {
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/tweak", payload, startedAt, error });
         setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+      } finally {
+        setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
     },
     [cards, persistDeck, setCardError, tweakDrafts],
@@ -640,6 +646,7 @@ export default function V2Page() {
   const restoreDeck = useCallback((entry: DeckHistoryEntry) => {
     setInput(entry.jobFunction ?? entry.cards[0]?.jobFunction ?? entry.input);
     setPersonDetails(entry.personDetails ?? entry.cards[0]?.personDetails ?? "");
+    setDeliveryMode(entry.deliveryMode ?? entry.cards[0]?.deliveryMode ?? "public");
     setCards(hydrateCards(entry.cards));
     saveActiveDeckId(entry.id);
     setCurrentDeckId(entry.id);
@@ -656,6 +663,7 @@ export default function V2Page() {
       input: shareableCards[0]?.originalInput ?? trimmedInput,
       jobFunction: shareableCards[0]?.jobFunction ?? trimmedInput,
       personDetails: shareableCards[0]?.personDetails ?? (trimmedDetails || undefined),
+      deliveryMode: shareableCards[0]?.deliveryMode ?? deliveryMode,
       cards: shareableCards.map((card) => ({
         personaId: card.personaId,
         personaName: card.personaName,
@@ -664,6 +672,7 @@ export default function V2Page() {
         originalInput: card.originalInput,
         jobFunction: card.jobFunction,
         personDetails: card.personDetails,
+        deliveryMode: card.deliveryMode ?? deliveryMode,
         guidelines: card.guidelines,
       })),
     };
@@ -689,7 +698,9 @@ export default function V2Page() {
       }
 
       const url = `${window.location.origin}/deck/${body.slug}`;
-      const shareText = `A three-voice HypeForge compliment deck for ${payload.input}.`;
+      const shareText = payload.deliveryMode === "direct"
+        ? `A three-voice HypeForge compliment deck written for ${payload.input}.`
+        : `A three-voice HypeForge public shout-out for ${payload.input}.`;
       if (navigator.share) {
         await navigator.share({ title: `${payload.input} has a HypeForge deck`, text: shareText, url });
         setShareMessage("Share sheet opened.");
@@ -702,7 +713,7 @@ export default function V2Page() {
       logApiExchange({ endpoint: "POST /api/share", payload: { input: payload.input, cardCount: payload.cards.length }, startedAt, error });
       setShareMessage("Share link could not be copied.");
     }
-  }, [cards, trimmedDetails, trimmedInput]);
+  }, [cards, deliveryMode, trimmedDetails, trimmedInput]);
 
   const clearSavedDecks = useCallback(() => {
     clearDeckHistory();
@@ -840,11 +851,13 @@ export default function V2Page() {
         <V2InputPanel
           jobFunction={input}
           personDetails={personDetails}
+          deliveryMode={deliveryMode}
           canGenerate={canGenerate}
           isGenerating={isGenerating}
           compact={showWorkspace}
           onJobFunctionChange={setInput}
           onPersonDetailsChange={setPersonDetails}
+          onDeliveryModeChange={setDeliveryMode}
           onGenerate={generate}
           onChooseExample={(example) => {
             setInput(example);
@@ -857,11 +870,11 @@ export default function V2Page() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
               <h2 className="v2-display text-3xl font-semibold text-[var(--text)]">
-                {cards.length > 0 ? "Choose a favorite" : "Creating your options"}
+                {cards.length > 0 ? "Choose a favorite" : "Forging three voices…"}
               </h2>
               <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[var(--text-muted)]">
                 {cards.length > 0
-                  ? `Three verified compliments for ${trimmedInput}.`
+                  ? `Three verified ${cards[0]?.deliveryMode === "public" ? "public-post" : "direct-message"} compliments for ${trimmedInput}.`
                   : "This usually takes a few seconds."}
               </p>
             </div>
@@ -927,6 +940,7 @@ export default function V2Page() {
                   }
                   tweakOpen={tweakCardId === card.id}
                   tweakValue={tweakDrafts[card.id] ?? ""}
+                  pendingAction={pendingCardActions[card.id]}
                   onToggleTweak={(cardId) => setTweakCardId((current) => (current === cardId ? null : cardId))}
                   onTweakValueChange={(cardId, value) =>
                     setTweakDrafts((current) => ({ ...current, [cardId]: value }))

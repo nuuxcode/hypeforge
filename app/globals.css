@@ -126,11 +126,32 @@ textarea {
 }
 
 .v2-card {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 20px;
   color: var(--ink);
   box-shadow: var(--card-shadow), inset 0 2px 0 var(--bucket-accent, #8b5cf6);
+  transition: background 260ms ease, border-color 260ms ease, box-shadow 260ms ease, transform 260ms ease;
+}
+
+.v2-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.v2-card::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  width: 55%;
+  content: "";
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(100deg, transparent 0%, color-mix(in srgb, var(--bucket-accent) 15%, transparent) 45%, transparent 100%);
+  transform: translateX(-150%) skewX(-12deg);
 }
 
 .v2-composer {
@@ -243,7 +264,44 @@ textarea {
 }
 
 .v2-card[data-loading="true"] {
-  animation: v2-heat-pulse 900ms ease-in-out infinite alternate;
+  border-color: color-mix(in srgb, var(--bucket-accent) 44%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 4%, var(--paper));
+  box-shadow: var(--card-shadow), 0 0 0 1px color-mix(in srgb, var(--bucket-accent) 14%, transparent), 0 12px 38px color-mix(in srgb, var(--bucket-accent) 14%, transparent), inset 0 2px 0 var(--bucket-accent);
+  transform: translateY(-2px);
+}
+
+.v2-card[data-loading="true"]::before {
+  opacity: 1;
+  animation: v2-forge-sweep 1.35s ease-in-out infinite;
+}
+
+.v2-card[data-action="escalate"] .v2-drama-button,
+.v2-card[data-action="retry"] .v2-retry-button,
+.v2-card[data-action="tweak"] .v2-tweak-submit {
+  border-color: transparent;
+  background: var(--bucket-accent);
+  color: #fff;
+  box-shadow: 0 7px 20px color-mix(in srgb, var(--bucket-accent) 28%, transparent);
+  opacity: 1;
+}
+
+.v2-card[data-power-up="true"] {
+  animation: v2-power-up 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.v2-card-copy[data-revealing="true"] {
+  animation: v2-copy-reveal 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.v2-forge-card {
+  animation: v2-forge-breathe 1.6s ease-in-out infinite;
+  animation-delay: var(--forge-delay, 0ms);
+}
+
+.v2-forge-card::before {
+  opacity: 1;
+  animation: v2-forge-sweep 1.55s ease-in-out infinite;
+  animation-delay: var(--forge-delay, 0ms);
 }
 
 @keyframes v2-card-rise {
@@ -257,12 +315,53 @@ textarea {
   }
 }
 
-@keyframes v2-heat-pulse {
+@keyframes v2-forge-sweep {
+  0% {
+    transform: translateX(-150%) skewX(-12deg);
+  }
+  68%,
+  100% {
+    transform: translateX(310%) skewX(-12deg);
+  }
+}
+
+@keyframes v2-forge-breathe {
+  0%,
+  100% {
+    border-color: var(--line);
+    transform: translateY(0);
+  }
+  50% {
+    border-color: color-mix(in srgb, var(--bucket-accent) 38%, var(--line));
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes v2-power-up {
+  0% {
+    box-shadow: var(--card-shadow), inset 0 2px 0 var(--bucket-accent);
+    transform: scale(0.992);
+  }
+  44% {
+    box-shadow: var(--card-shadow), 0 0 0 5px color-mix(in srgb, var(--bucket-accent) 16%, transparent), 0 16px 46px color-mix(in srgb, var(--bucket-accent) 20%, transparent), inset 0 2px 0 var(--bucket-accent);
+    transform: scale(1.008);
+  }
+  100% {
+    box-shadow: var(--card-shadow), inset 0 2px 0 var(--bucket-accent);
+    transform: scale(1);
+  }
+}
+
+@keyframes v2-copy-reveal {
   from {
-    filter: saturate(1);
+    opacity: 0.28;
+    clip-path: inset(0 100% 0 0);
+    transform: translateY(5px);
   }
   to {
-    filter: saturate(1.18);
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+    transform: translateY(0);
   }
 }
 
@@ -319,6 +418,11 @@ textarea {
   .v2-card,
   .v2-card-enter,
   .v2-card[data-loading="true"],
+  .v2-card[data-loading="true"]::before,
+  .v2-card[data-power-up="true"],
+  .v2-card-copy[data-revealing="true"],
+  .v2-forge-card,
+  .v2-forge-card::before,
   .v2-confetti i,
   .animate-pulse {
     animation: none;

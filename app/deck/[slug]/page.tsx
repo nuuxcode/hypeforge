@@ -16,7 +16,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!deck) return { title: "Shared deck not found", robots: { index: false, follow: false } };
 
   const title = `A compliment deck for ${deck.input}`;
-  const description = `Three distinct HypeForge compliments celebrating ${deck.input}.`;
+  const description = deck.deliveryMode === "direct"
+    ? `Three distinct HypeForge compliments written directly for ${deck.input}.`
+    : `Three distinct HypeForge compliments celebrating ${deck.input} in public.`;
   return {
     title,
     description,
@@ -47,12 +49,18 @@ export default async function SharedDeckPage({ params }: { params: Promise<{ slu
         </header>
 
         <article className="py-12 sm:py-16">
-          <p className="v2-mono text-xs uppercase text-[var(--purple-soft)]">Shared compliment deck</p>
+          <p className="v2-mono text-xs uppercase text-[var(--purple-soft)]">
+            {deck.deliveryMode === "direct" ? "A message for you" : "A public shout-out"}
+          </p>
           <h1 className="v2-display mt-3 max-w-4xl text-4xl font-semibold leading-tight text-[var(--text)] sm:text-5xl">
-            A little evidence that {deck.input} is a living legend.
+            {deck.deliveryMode === "direct"
+              ? `Three compliments written for ${deck.input}.`
+              : `A little evidence that ${deck.input} is a living legend.`}
           </h1>
           <p className="mt-5 max-w-2xl text-lg font-medium leading-8 text-[var(--text-muted)]">
-            Three distinct voices, forged to celebrate the impact they make.
+            {deck.deliveryMode === "direct"
+              ? "Three distinct voices speaking directly to the person being celebrated."
+              : "Three distinct voices inviting everyone to celebrate the impact they make."}
           </p>
 
           <div className="mt-10 grid items-start gap-5 md:grid-cols-2 xl:grid-cols-3">

@@ -30,7 +30,7 @@ describe("POST /api/generate", () => {
     vi.clearAllMocks();
   });
 
-  it("returns three public compliment cards", async () => {
+  it("returns three direct-message compliment cards by default", async () => {
     const response = await POST(
       new Request("http://localhost/api/generate", {
         method: "POST",
@@ -47,6 +47,7 @@ describe("POST /api/generate", () => {
       dramaLevel: 1,
       status: "idle",
       copied: false,
+      deliveryMode: "direct",
     });
     expect(body.cards[0].history).toHaveLength(1);
     expect(body.cards[0].guidelines).toMatchObject({ version: "2.1", wordCount: 38 });
@@ -54,6 +55,21 @@ describe("POST /api/generate", () => {
     expect(body.debug.requestId).toEqual(expect.any(String));
     expect(body.debug.events.some((event: { message: string }) => event.message === "selected personas")).toBe(true);
     expect(generateCompliantCompliment).toHaveBeenCalledTimes(3);
+  });
+
+  it("preserves public-post delivery mode through every generated card", async () => {
+    const response = await POST(
+      new Request("http://localhost/api/generate", {
+        method: "POST",
+        body: JSON.stringify({ jobFunction: "Customer Success Manager", deliveryMode: "public" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(body.cards.every((card: { deliveryMode: string }) => card.deliveryMode === "public")).toBe(true);
+    expect(generateCompliantCompliment).toHaveBeenCalledWith(
+      expect.objectContaining({ deliveryMode: "public" }),
+    );
   });
 
   it("keeps a required function and optional details separate throughout the card contract", async () => {

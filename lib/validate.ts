@@ -8,6 +8,7 @@ export const MIN_INPUT_LENGTH = 3;
 export const MAX_INPUT_LENGTH = 360;
 export const MAX_DETAILS_LENGTH = 240;
 export const MAX_HISTORY_ITEMS = 10;
+export const DeliveryModeSchema = z.enum(["direct", "public"]);
 
 // Prompts frame user input inside XML-style delimiters, so raw angle brackets
 // are the one character class that could break out of the data block. They add
@@ -38,6 +39,7 @@ export const GenerateBodySchema = z.object({
   input: z.string().optional(),
   jobFunction: z.string().optional(),
   personDetails: z.string().max(MAX_DETAILS_LENGTH).optional(),
+  deliveryMode: DeliveryModeSchema.default("direct"),
   preference: z
     .object({
       liked: z.array(z.string().max(180)).max(3).default([]),
@@ -51,6 +53,7 @@ export const EscalateBodySchema = z.object({
   originalInput: z.string(),
   jobFunction: z.string().optional(),
   personDetails: z.string().max(MAX_DETAILS_LENGTH).optional(),
+  deliveryMode: DeliveryModeSchema.default("direct"),
   currentText: z.string().min(1).max(MAX_COMPLIMENT_LENGTH),
   history: z.array(z.string().min(1).max(MAX_COMPLIMENT_LENGTH)).min(1).max(MAX_HISTORY_ITEMS),
   dramaLevel: z.number().int().min(1).max(20),
@@ -61,6 +64,7 @@ export const RetryBodySchema = z.object({
   originalInput: z.string(),
   jobFunction: z.string().optional(),
   personDetails: z.string().max(MAX_DETAILS_LENGTH).optional(),
+  deliveryMode: DeliveryModeSchema.default("direct"),
 });
 
 export const TweakBodySchema = z.object({
@@ -68,6 +72,7 @@ export const TweakBodySchema = z.object({
   originalInput: z.string(),
   jobFunction: z.string().optional(),
   personDetails: z.string().max(MAX_DETAILS_LENGTH).optional(),
+  deliveryMode: DeliveryModeSchema.default("direct"),
   currentText: z.string().min(1).max(MAX_COMPLIMENT_LENGTH),
   history: z.array(z.string().min(1).max(MAX_COMPLIMENT_LENGTH)).min(1).max(MAX_HISTORY_ITEMS),
   dramaLevel: z.number().int().min(1).max(20),
@@ -78,6 +83,7 @@ export const ShareDeckBodySchema = z.object({
   input: z.string().min(MIN_INPUT_LENGTH).max(MAX_INPUT_LENGTH),
   jobFunction: z.string().min(MIN_INPUT_LENGTH).max(MAX_INPUT_LENGTH).optional(),
   personDetails: z.string().max(MAX_DETAILS_LENGTH).optional(),
+  deliveryMode: DeliveryModeSchema.optional(),
   cards: z
     .array(
       z.object({
@@ -88,6 +94,7 @@ export const ShareDeckBodySchema = z.object({
         originalInput: z.string().max(MAX_INPUT_LENGTH),
         jobFunction: z.string().min(MIN_INPUT_LENGTH).max(MAX_INPUT_LENGTH).optional(),
         personDetails: z.string().max(MAX_DETAILS_LENGTH).optional(),
+        deliveryMode: DeliveryModeSchema.optional(),
         guidelines: VerifiedGuidelineComplianceSchema.optional(),
       }),
     )

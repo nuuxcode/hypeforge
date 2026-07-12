@@ -1,4 +1,6 @@
 export type CardStatus = "idle" | "loading" | "error";
+export type CardPendingAction = "escalate" | "retry" | "tweak";
+export type DeliveryMode = "direct" | "public";
 
 export type PersonaBucket = "grand" | "mythic" | "chaotic";
 
@@ -65,6 +67,7 @@ export type ComplimentCard = {
   originalInput: string;
   jobFunction?: string;
   personDetails?: string;
+  deliveryMode?: DeliveryMode;
   personaId: string;
   personaName: string;
   text: string;
@@ -82,6 +85,7 @@ export type ComplimentCard = {
 export type ComplimentSubject = {
   jobFunction: string;
   personDetails?: string;
+  deliveryMode?: DeliveryMode;
 };
 
 export type ApiDebugEvent = {

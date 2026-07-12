@@ -1,8 +1,10 @@
 "use client";
 
-import { ChevronDown, LoaderCircle, WandSparkles } from "lucide-react";
+import { ChevronDown, LoaderCircle, Megaphone, MessageCircle, WandSparkles } from "lucide-react";
 import { useState } from "react";
+import type { DeliveryMode } from "@/lib/types";
 import { MAX_DETAILS_LENGTH, MAX_INPUT_LENGTH } from "@/lib/validate";
+import { playForgeSound } from "@/lib/forge-sound";
 
 // One chip is a person-details description on purpose: it shows the input
 // takes more than bare job titles.
@@ -16,21 +18,25 @@ const EXAMPLES = [
 export function V2InputPanel({
   jobFunction,
   personDetails,
+  deliveryMode,
   canGenerate,
   isGenerating,
   compact,
   onJobFunctionChange,
   onPersonDetailsChange,
+  onDeliveryModeChange,
   onGenerate,
   onChooseExample,
 }: {
   jobFunction: string;
   personDetails: string;
+  deliveryMode: DeliveryMode;
   canGenerate: boolean;
   isGenerating: boolean;
   compact: boolean;
   onJobFunctionChange: (value: string) => void;
   onPersonDetailsChange: (value: string) => void;
+  onDeliveryModeChange: (value: DeliveryMode) => void;
   onGenerate: () => void;
   onChooseExample: (value: string) => void;
 }) {
@@ -52,6 +58,7 @@ export function V2InputPanel({
         className={compact ? "mt-5 space-y-4" : "mt-8 space-y-5"}
         onSubmit={(event) => {
           event.preventDefault();
+          if (canGenerate && !isGenerating) playForgeSound("charge");
           onGenerate();
         }}
       >
@@ -80,6 +87,41 @@ export function V2InputPanel({
             <span>{jobFunction.length}/{MAX_INPUT_LENGTH}</span>
           </div>
         </div>
+
+        <fieldset>
+          <legend className="mb-2 text-sm font-semibold text-[var(--text)]">How will you share it?</legend>
+          <div className="grid grid-cols-2 gap-1 rounded-[14px] bg-[var(--input-bg)] p-1" role="group">
+            <button
+              aria-pressed={deliveryMode === "direct"}
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-[11px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)] ${
+                deliveryMode === "direct"
+                  ? "bg-[var(--panel)] text-[var(--text)] shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text)]"
+              }`}
+              type="button"
+              onClick={() => onDeliveryModeChange("direct")}
+            >
+              <MessageCircle aria-hidden="true" className="size-4" />
+              Direct
+            </button>
+            <button
+              aria-pressed={deliveryMode === "public"}
+              className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-[11px] px-3 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)] ${
+                deliveryMode === "public"
+                  ? "bg-[var(--panel)] text-[var(--text)] shadow-sm"
+                  : "text-[var(--text-muted)] hover:text-[var(--text)]"
+              }`}
+              type="button"
+              onClick={() => onDeliveryModeChange("public")}
+            >
+              <Megaphone aria-hidden="true" className="size-4" />
+              Public
+            </button>
+          </div>
+          <p className="mt-2 text-xs font-medium leading-5 text-[var(--text-faint)]">
+            {deliveryMode === "direct" ? "Written to them using you and your." : "Written about them for a team or public post."}
+          </p>
+        </fieldset>
 
         <div>
           <button
@@ -118,7 +160,7 @@ export function V2InputPanel({
           type="submit"
         >
           {isGenerating ? <LoaderCircle aria-hidden="true" className="size-5 animate-spin" /> : <WandSparkles aria-hidden="true" className="size-5" />}
-          {isGenerating ? "Creating compliments…" : "Generate 3 compliments"}
+          {isGenerating ? "Forging 3 voices…" : "Generate 3 compliments"}
         </button>
         <p className="sr-only" role="status">
           {canGenerate ? "Ready to generate three compliments." : "Add a job or role to enable generation."}

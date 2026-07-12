@@ -73,6 +73,7 @@ describe("deck history helpers", () => {
     const shared = readShareToken(legacyToken);
     expect(shared?.input).toBe("Customer Success Manager");
     expect(shared?.cards).toHaveLength(1);
+    expect(shared?.deliveryMode).toBeUndefined();
     expect(shared?.cards[0]?.guidelines).toEqual(COMPLIANT_GUIDELINES);
     expect(readShareToken("not-a-deck")).toBeNull();
   });
