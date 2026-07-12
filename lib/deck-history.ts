@@ -138,6 +138,14 @@ export function nextFeedbackVote(current: FeedbackVote | undefined, requested: F
   return current === requested ? undefined : requested;
 }
 
+// When the user restores an earlier version, the card's text history must end
+// at that version too, or the next escalation would show the model "future"
+// versions the user rewound away.
+export function truncateHistoryAt(history: string[], restoredText: string): string[] {
+  const cutIndex = history.lastIndexOf(restoredText);
+  return cutIndex >= 0 ? history.slice(0, cutIndex + 1) : [restoredText];
+}
+
 function toBase64Url(value: string): string {
   return btoa(encodeURIComponent(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }

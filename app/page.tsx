@@ -19,6 +19,7 @@ import { Tooltip } from "@/components/tooltip";
 import { V2InputPanel } from "@/components/v2-input-panel";
 import { V2ComplimentCard } from "@/components/v2-compliment-card";
 import { fetchWithTimeout } from "@/lib/client-fetch";
+import { isAtDramaCap } from "@/lib/drama";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   buildSoftPreferenceContext,
@@ -30,6 +31,7 @@ import {
   loadTasteSignals,
   nextFeedbackVote,
   readShareToken,
+  truncateHistoryAt,
   removeDeckHistory,
   removeTasteSignal,
   saveDeckHistory,
@@ -581,7 +583,7 @@ export default function V2Page() {
   const escalate = useCallback(
     async (cardId: string) => {
       const card = cards.find((item) => item.id === cardId);
-      if (!card || card.status === "loading" || !card.text) return;
+      if (!card || card.status === "loading" || !card.text || isAtDramaCap(card.dramaLevel)) return;
 
       setCards((current) =>
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
@@ -819,6 +821,7 @@ export default function V2Page() {
           ? {
               ...item,
               text: version.text,
+              history: truncateHistoryAt(item.history, version.text),
               dramaLevel: version.dramaLevel,
               guidelines: version.guidelines,
               activeVersionId: version.id,

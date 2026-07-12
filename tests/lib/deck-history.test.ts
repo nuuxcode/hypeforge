@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSoftPreferenceContext, createShareToken, nextFeedbackVote, readShareToken, type TasteSignal } from "@/lib/deck-history";
+import { buildSoftPreferenceContext, createShareToken, nextFeedbackVote, readShareToken, truncateHistoryAt, type TasteSignal } from "@/lib/deck-history";
 import type { ComplimentCard } from "@/lib/types";
 import { COMPLIANT_GUIDELINES } from "@/tests/fixtures/guidelines";
 
@@ -79,5 +79,28 @@ describe("deck history helpers", () => {
     expect(nextFeedbackVote("down", "up")).toBe("up");
     expect(nextFeedbackVote("up", "down")).toBe("down");
     expect(nextFeedbackVote("up", "up")).toBeUndefined();
+  });
+});
+
+describe("truncateHistoryAt", () => {
+  const v1 = "Version one.";
+  const v2 = "Version two.";
+  const v3 = "Version three.";
+
+  it("cuts everything after the restored version", () => {
+    expect(truncateHistoryAt([v1, v2, v3], v1)).toEqual([v1]);
+    expect(truncateHistoryAt([v1, v2, v3], v2)).toEqual([v1, v2]);
+  });
+
+  it("keeps a full history when the newest version is restored", () => {
+    expect(truncateHistoryAt([v1, v2, v3], v3)).toEqual([v1, v2, v3]);
+  });
+
+  it("uses the last occurrence when a text repeats", () => {
+    expect(truncateHistoryAt([v1, v2, v1, v3], v1)).toEqual([v1, v2, v1]);
+  });
+
+  it("falls back to the restored text alone when history diverged", () => {
+    expect(truncateHistoryAt([v1, v2], "A version from a retry.")).toEqual(["A version from a retry."]);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { type CSSProperties, useState } from "react";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
+import { dramaButtonLabel, isAtDramaCap } from "@/lib/drama";
 import { PERSONAS } from "@/lib/personas";
 import type { ComplimentCard, ComplimentCardVersion, FeedbackVote, GuidelineCompliance, PersonaBucket } from "@/lib/types";
 
@@ -27,13 +28,6 @@ const BUCKET_ACCENT: Record<PersonaBucket, string> = {
 };
 
 const PERSONA_BUCKET = Object.fromEntries(PERSONAS.map((persona) => [persona.id, persona.bucket])) as Record<string, PersonaBucket>;
-
-function dramaButtonLabel(level: number): string {
-  if (level <= 1) return "Make it more dramatic";
-  if (level === 2) return "Make it wildly excessive";
-  if (level === 3) return "Summon the prophecy";
-  return "Launch it into mythology";
-}
 
 function badgeLabel(level: number): string {
   return `DRAMA · ${String(level).padStart(2, "0")}`;
@@ -120,6 +114,21 @@ export function V2ComplimentCard({
   const earlierVersion = versions[activeVersionIndex - 1];
   const laterVersion = versions[activeVersionIndex + 1];
   const [expandedVersionIds, setExpandedVersionIds] = useState<Record<string, boolean>>({});
+  const atDramaCap = isAtDramaCap(card.dramaLevel);
+
+  // One confetti burst the moment a card reaches the drama cap, never on
+  // remounts of an already-capped card (e.g. restored decks).
+  const [celebrating, setCelebrating] = useState(false);
+  const previousDramaLevel = useRef(card.dramaLevel);
+  useEffect(() => {
+    if (!isAtDramaCap(previousDramaLevel.current) && isAtDramaCap(card.dramaLevel)) {
+      setCelebrating(true);
+      const timer = setTimeout(() => setCelebrating(false), 1700);
+      previousDramaLevel.current = card.dramaLevel;
+      return () => clearTimeout(timer);
+    }
+    previousDramaLevel.current = card.dramaLevel;
+  }, [card.dramaLevel]);
 
   const toolClass =
     "grid size-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-[var(--control-hover)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]";
@@ -292,12 +301,23 @@ export function V2ComplimentCard({
         <div className="mt-auto grid gap-2 sm:grid-cols-2 lg:grid-cols-1 min-[1500px]:grid-cols-2">
           {hasText ? (
             <button
-              aria-label={`Make ${card.personaName} compliment more dramatic`}
-              className="v2-secondary-button inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={isLoading}
+              aria-label={
+                atDramaCap
+                  ? `${card.personaName} compliment reached maximum drama`
+                  : `Make ${card.personaName} compliment more dramatic`
+              }
+              className="v2-secondary-button relative inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isLoading || atDramaCap}
               type="button"
               onClick={() => onEscalate(card.id)}
             >
+              {celebrating ? (
+                <span aria-hidden="true" className="v2-confetti">
+                  {Array.from({ length: 14 }, (_, particle) => (
+                    <i key={particle} style={{ "--particle": particle } as CSSProperties} />
+                  ))}
+                </span>
+              ) : null}
               {isLoading ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
               ) : (
