@@ -30,7 +30,7 @@ export function GuidelineProof({
   if (!guidelines) {
     return (
       <div
-        className={`flex items-center gap-2 rounded-[12px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] px-3 py-2 text-xs font-bold text-[var(--ink-muted)] ${className}`}
+        className={`flex items-center gap-2 rounded-[12px] bg-[var(--paper-secondary)] px-3 py-2 text-xs font-medium text-[var(--ink-muted)] ${className}`}
       >
         <CircleAlert aria-hidden="true" className="size-4 shrink-0 text-[var(--coral)]" />
         Generated before Guidelines v2.1 - not verified
@@ -44,24 +44,24 @@ export function GuidelineProof({
   return (
     <section
       aria-label="Company compliment guideline proof"
-      className={`overflow-hidden rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] ${className}`}
+      className={`overflow-hidden rounded-[12px] bg-[var(--paper-secondary)] ${className}`}
     >
       <button
         aria-expanded={open}
-        className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+        className="flex min-h-11 w-full cursor-pointer items-center gap-2 px-3 py-2 text-left transition hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
         type="button"
         onClick={() => setOpen((current) => !current)}
       >
         <ShieldCheck
           aria-hidden="true"
-          className={`size-4 shrink-0 ${fullyVerified ? "text-[#557a00]" : "text-[var(--coral)]"}`}
+          className={`size-4 shrink-0 ${fullyVerified ? "text-[#47751f]" : "text-[var(--coral)]"}`}
         />
         <span className="min-w-0 flex-1">
-          <span className="block text-xs font-bold text-[var(--ink)]">
-            Guidelines v{guidelines.version} · {passed}/8 verified
+          <span className="block text-xs font-semibold text-[var(--ink)]">
+            {passed}/8 guidelines verified
           </span>
-          <span className="block text-[0.68rem] font-semibold text-[var(--ink-muted)]">
-            {guidelines.wordCount}/40 words · {open ? "Hide proof" : "View proof"}
+          <span className="block text-[0.68rem] font-medium text-[var(--ink-muted)]">
+            {guidelines.wordCount} words · {open ? "Hide details" : "View details"}
           </span>
         </span>
         <ChevronDown
@@ -71,7 +71,7 @@ export function GuidelineProof({
       </button>
 
       {open ? (
-        <ul className="border-t border-[var(--dark-line)] px-3 py-1">
+        <ul className="border-t border-[var(--dark-line)]/60 px-3 py-1">
           {guidelines.checks.map((item) => (
             <li className="border-b border-[var(--dark-line)] py-2.5 last:border-b-0" key={item.id}>
               <div className="flex items-start gap-2">

@@ -26,6 +26,10 @@ try {
   const desktop = await desktopContext.newPage();
   await desktop.goto(`${baseUrl}/v2`, { waitUntil: "networkidle" });
   await audit("generator desktop", desktop, "main");
+  await desktop.getByRole("button", { name: "Switch to dark mode" }).click();
+  await desktop.waitForTimeout(250);
+  await audit("generator desktop dark", desktop, "main");
+  await desktop.getByRole("button", { name: "Switch to light mode" }).click();
   await desktop.getByRole("button", { name: "Open compliment guide" }).click();
   await audit("compliment guide dialog", desktop, '[role="dialog"]');
 
@@ -46,5 +50,5 @@ if (violations.length > 0) {
   console.error(JSON.stringify({ ok: false, violations }, null, 2));
   process.exitCode = 1;
 } else {
-  console.log(JSON.stringify({ ok: true, audited: 4 }, null, 2));
+  console.log(JSON.stringify({ ok: true, audited: 5 }, null, 2));
 }

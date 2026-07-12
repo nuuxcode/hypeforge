@@ -122,26 +122,25 @@ export function V2ComplimentCard({
   const [expandedVersionIds, setExpandedVersionIds] = useState<Record<string, boolean>>({});
 
   const toolClass =
-    "grid size-9 place-items-center rounded-[12px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] text-[var(--ink)] transition hover:-translate-y-0.5 hover:bg-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45";
+    "grid size-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-[var(--control-hover)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]";
 
   return (
     <article
       aria-busy={isLoading}
-      className="v2-card v2-card-enter h-fit min-h-[320px] min-w-0 w-full max-w-full p-5 sm:p-6"
+      className="v2-card v2-card-enter flex h-full min-w-0 w-full max-w-full flex-col p-5"
       data-loading={isLoading ? "true" : "false"}
       style={styleForCard(card, index)}
     >
       <header className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="v2-mono text-[0.68rem] uppercase text-[var(--ink-muted)]">Persona label</p>
-          <h2 className="v2-display mt-1 text-xl font-semibold leading-7 text-[var(--ink)]">{card.personaName}</h2>
-          <p className="v2-mono mt-2 text-[0.68rem] uppercase" style={{ color: BUCKET_ACCENT[bucket] }}>
+          <p className="text-xs font-semibold capitalize" style={{ color: BUCKET_ACCENT[bucket] }}>
             {bucket}
           </p>
+          <h2 className="v2-display mt-1 text-lg font-semibold leading-6 text-[var(--ink)]">{card.personaName}</h2>
         </div>
         <div
           aria-label={`${badgeLabel(card.dramaLevel)}, version ${activeVersionIndex + 1} of ${versions.length}`}
-          className="v2-mono inline-flex h-9 shrink-0 items-stretch overflow-hidden rounded-full border border-[var(--dark-line)] bg-[var(--paper-secondary)] text-xs font-bold text-[var(--ink)]"
+          className="v2-mono inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-full bg-[var(--paper-secondary)] text-[0.68rem] font-semibold text-[var(--ink)]"
           role="group"
         >
           <Tooltip align="end" label="View earlier version">
@@ -151,7 +150,7 @@ export function V2ComplimentCard({
                   ? `View earlier ${card.personaName} version, drama ${String(earlierVersion.dramaLevel).padStart(2, "0")}`
                   : `No earlier ${card.personaName} version is available`
               }
-              className="grid h-9 w-8 place-items-center border-r border-[var(--dark-line)] transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+              className="grid h-8 w-7 place-items-center transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-30 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
               disabled={!earlierVersion || isLoading}
               type="button"
               onClick={() => earlierVersion && onRestoreVersion(card.id, earlierVersion)}
@@ -159,7 +158,7 @@ export function V2ComplimentCard({
               <ChevronDown aria-hidden="true" className="size-4" />
             </button>
           </Tooltip>
-          <span aria-hidden="true" className="inline-flex items-center px-2.5">
+          <span aria-hidden="true" className="inline-flex items-center border-x border-[var(--dark-line)]/60 px-2.5">
             {badgeLabel(card.dramaLevel)}
           </span>
           <Tooltip align="end" label="View later version">
@@ -169,7 +168,7 @@ export function V2ComplimentCard({
                   ? `View later ${card.personaName} version, drama ${String(laterVersion.dramaLevel).padStart(2, "0")}`
                   : `No later ${card.personaName} version is available`
               }
-              className="grid h-9 w-8 place-items-center border-l border-[var(--dark-line)] transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+              className="grid h-8 w-7 place-items-center transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-30 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
               disabled={!laterVersion || isLoading}
               type="button"
               onClick={() => laterVersion && onRestoreVersion(card.id, laterVersion)}
@@ -180,67 +179,11 @@ export function V2ComplimentCard({
         </div>
       </header>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[var(--dark-line)] py-3">
-        <Tooltip align="start" label="Helpful: use more of this feeling">
-          <button
-            aria-label={`Like ${card.personaName} compliment`}
-            aria-pressed={card.feedback === "up"}
-            className={`${toolClass} ${card.feedback === "up" ? "border-[#446100] bg-[#d4ff66] text-[#203000]" : ""}`}
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onSetFeedback(card.id, "up")}
-          >
-            <ThumbsUp aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip align="start" label="Not for me: use less of this feeling">
-          <button
-            aria-label={`Dislike ${card.personaName} compliment`}
-            aria-pressed={card.feedback === "down"}
-            className={`${toolClass} ${card.feedback === "down" ? "border-[#ff6b5f] bg-[#ff6b5f]/15 text-[#8c2d24]" : ""}`}
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onSetFeedback(card.id, "down")}
-          >
-            <ThumbsDown aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Version history">
-          <button
-            aria-expanded={versionsOpen}
-            aria-label={`Open ${card.personaName} version history`}
-            className={toolClass}
-            disabled={versions.length === 0 || isLoading}
-            type="button"
-            onClick={() => onToggleVersions(card.id)}
-          >
-            <History aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Tweak this card">
-          <button
-            aria-expanded={tweakOpen}
-            aria-label={`Tweak ${card.personaName} compliment`}
-            className={toolClass}
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onToggleTweak(card.id)}
-          >
-            <SlidersHorizontal aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        {card.feedback ? (
-          <span className="ml-1 text-xs font-bold text-[var(--ink-muted)]" role="status">
-            {card.feedback === "up" ? "More of this next time" : "Less of this next time"}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="mt-5 space-y-6">
+      <div className="mt-6 flex flex-1 flex-col space-y-5">
         <div className="space-y-4">
           {hasText ? (
             <>
-              <p aria-live="polite" className="v2-display text-base font-semibold leading-6 text-[var(--ink)] sm:text-[1.05rem]">
+              <p aria-live="polite" className="v2-display text-base font-medium leading-7 text-[var(--ink)]">
                 {card.text}
               </p>
               <GuidelineProof guidelines={card.guidelines} />
@@ -346,11 +289,11 @@ export function V2ComplimentCard({
           </section>
         ) : null}
 
-        <div className="grid gap-2 min-[1500px]:grid-cols-[minmax(0,1fr)_auto]">
+        <div className="mt-auto grid gap-2 sm:grid-cols-2 lg:grid-cols-1 min-[1500px]:grid-cols-2">
           {hasText ? (
             <button
               aria-label={`Make ${card.personaName} compliment more dramatic`}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--ink)] px-4 py-2 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+              className="v2-secondary-button inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isLoading}
               type="button"
               onClick={() => onEscalate(card.id)}
@@ -364,7 +307,7 @@ export function V2ComplimentCard({
             </button>
           ) : (
             <button
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--ink)] px-4 py-2 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+              className="v2-secondary-button inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               disabled={isLoading}
               type="button"
               onClick={() => onRetry(card.id)}
@@ -376,7 +319,7 @@ export function V2ComplimentCard({
 
           <button
             aria-label={`Copy ${card.personaName} compliment`}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] px-4 py-2 text-sm font-bold text-[var(--ink)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+            className="v2-primary-button inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             disabled={!hasText || isLoading}
             type="button"
             onClick={() => onCopy(card.id, card.text)}
@@ -388,6 +331,62 @@ export function V2ComplimentCard({
             )}
             {card.copied ? "Copied!" : "Copy"}
           </button>
+        </div>
+
+        <div className="flex min-h-11 flex-wrap items-center gap-1 border-t border-[var(--dark-line)]/60 pt-3">
+          <Tooltip align="start" label="Use more of this style">
+            <button
+              aria-label={`Like ${card.personaName} compliment`}
+              aria-pressed={card.feedback === "up"}
+              className={`${toolClass} ${card.feedback === "up" ? "bg-[#e4f7cf] text-[#315b16]" : ""}`}
+              disabled={!hasText || isLoading}
+              type="button"
+              onClick={() => onSetFeedback(card.id, "up")}
+            >
+              <ThumbsUp aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
+          <Tooltip align="start" label="Use less of this style">
+            <button
+              aria-label={`Dislike ${card.personaName} compliment`}
+              aria-pressed={card.feedback === "down"}
+              className={`${toolClass} ${card.feedback === "down" ? "bg-[#ffe8e5] text-[#8c2d24]" : ""}`}
+              disabled={!hasText || isLoading}
+              type="button"
+              onClick={() => onSetFeedback(card.id, "down")}
+            >
+              <ThumbsDown aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Version history">
+            <button
+              aria-expanded={versionsOpen}
+              aria-label={`Open ${card.personaName} version history`}
+              className={toolClass}
+              disabled={versions.length === 0 || isLoading}
+              type="button"
+              onClick={() => onToggleVersions(card.id)}
+            >
+              <History aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Tweak this card">
+            <button
+              aria-expanded={tweakOpen}
+              aria-label={`Tweak ${card.personaName} compliment`}
+              className={toolClass}
+              disabled={!hasText || isLoading}
+              type="button"
+              onClick={() => onToggleTweak(card.id)}
+            >
+              <SlidersHorizontal aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
+          {card.feedback ? (
+            <span className="ml-1 text-xs font-medium text-[var(--ink-muted)]" role="status">
+              Preference saved
+            </span>
+          ) : null}
         </div>
       </div>
     </article>

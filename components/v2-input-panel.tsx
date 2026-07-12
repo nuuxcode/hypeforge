@@ -1,70 +1,63 @@
 "use client";
 
-import { LoaderCircle, WandSparkles } from "lucide-react";
+import { ChevronDown, LoaderCircle, WandSparkles } from "lucide-react";
+import { useState } from "react";
 import { MAX_DETAILS_LENGTH, MAX_INPUT_LENGTH } from "@/lib/validate";
 
-export const V2_EXAMPLES = [
-  "Customer Success Manager",
-  "Recruiter who never misses",
-  "Founding Engineer",
-  "my friend Sara who fixes every crisis",
-  "a teacher who makes everyone believe in themselves",
-  "a product manager with impossible calendar skills",
-] as const;
+const EXAMPLES = ["Customer Success Manager", "Founding Engineer", "Teacher"] as const;
 
 export function V2InputPanel({
   jobFunction,
   personDetails,
   canGenerate,
   isGenerating,
-  examplesExpanded,
+  compact,
   onJobFunctionChange,
   onPersonDetailsChange,
   onGenerate,
-  onToggleExamples,
   onChooseExample,
 }: {
   jobFunction: string;
   personDetails: string;
   canGenerate: boolean;
   isGenerating: boolean;
-  examplesExpanded: boolean;
+  compact: boolean;
   onJobFunctionChange: (value: string) => void;
   onPersonDetailsChange: (value: string) => void;
   onGenerate: () => void;
-  onToggleExamples: () => void;
   onChooseExample: (value: string) => void;
 }) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const showDetails = detailsOpen || personDetails.length > 0;
+
   return (
-    <section
-      className="self-start rounded-[24px] border border-[var(--line-strong)] bg-[var(--panel)] p-5 sm:p-6 lg:sticky lg:top-24"
-      style={{ boxShadow: "var(--panel-shadow)" }}
-    >
-      <p className="v2-mono text-[0.68rem] uppercase text-[var(--cyan)]">Step 1 · Start here</p>
-      <h1 className="v2-display mt-3 text-3xl font-semibold leading-tight text-[var(--text)] sm:text-4xl">
-        Create three <span className="v2-gradient-text">distinct compliments.</span>
+    <section className={`v2-composer self-start ${compact ? "hidden p-5 lg:sticky lg:top-24 lg:block" : "p-6 sm:p-8"}`}>
+      <h1 className={`v2-display font-semibold text-[var(--text)] ${compact ? "text-xl" : "text-4xl sm:text-5xl"}`}>
+        {compact ? "New deck" : "Make someone’s day."}
       </h1>
-      <p className="mt-4 text-sm font-medium leading-6 text-[var(--text-muted)]">
-        Start with their job or workplace function, then add an optional detail or recent win.
-      </p>
+      {!compact ? (
+        <p className="mt-4 max-w-xl text-base font-medium leading-7 text-[var(--text-muted)]">
+          Tell us what they do. Get three thoughtful, delightfully over-the-top compliments.
+        </p>
+      ) : null}
 
       <form
-        className="mt-6 space-y-4"
+        className={compact ? "mt-5 space-y-4" : "mt-8 space-y-5"}
         onSubmit={(event) => {
           event.preventDefault();
           onGenerate();
         }}
       >
         <div className="space-y-2">
-          <label className="v2-mono text-[0.68rem] uppercase text-[var(--text-muted)]" htmlFor="v2-subject">
-            Job title or workplace function <span aria-hidden="true">*</span>
+          <label className="text-sm font-semibold text-[var(--text)]" htmlFor="v2-subject">
+            Their job or role
           </label>
           <textarea
             aria-describedby="v2-subject-help"
-            className="min-h-24 w-full resize-none rounded-[18px] border border-[var(--line-strong)] bg-[var(--input-bg)] px-4 py-4 text-base font-semibold leading-7 text-[var(--text)] outline-none transition placeholder:text-[var(--input-placeholder)] focus:border-[var(--purple)] focus:ring-4 focus:ring-[#8b5cf6]/20"
+            className={`v2-input w-full resize-none px-4 text-base font-medium leading-7 text-[var(--text)] outline-none ${compact ? "min-h-20 py-3" : "min-h-24 py-4"}`}
             id="v2-subject"
             maxLength={MAX_INPUT_LENGTH}
-            placeholder="e.g. Customer Success Manager"
+            placeholder="Customer Success Manager"
             required
             value={jobFunction}
             onChange={(event) => onJobFunctionChange(event.target.value)}
@@ -75,68 +68,72 @@ export function V2InputPanel({
               }
             }}
           />
-          <div className="flex items-center justify-between gap-3 text-xs font-bold text-[var(--text-faint)]" id="v2-subject-help">
-            <span>Required. Use a title or a clear phrase describing what they do.</span>
+          <div className="flex items-center justify-between gap-3 text-xs font-medium text-[var(--text-faint)]" id="v2-subject-help">
+            <span>Required</span>
             <span>{jobFunction.length}/{MAX_INPUT_LENGTH}</span>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="v2-mono text-[0.68rem] uppercase text-[var(--text-muted)]" htmlFor="v2-details">
-            Optional details
-          </label>
-          <textarea
-            aria-describedby="v2-details-help"
-            className="min-h-20 w-full resize-none rounded-[18px] border border-[var(--line)] bg-[var(--input-bg)] px-4 py-3 text-sm font-semibold leading-6 text-[var(--text)] outline-none transition placeholder:text-[var(--input-placeholder)] focus:border-[var(--purple)] focus:ring-4 focus:ring-[#8b5cf6]/20"
-            id="v2-details"
-            maxLength={MAX_DETAILS_LENGTH}
-            placeholder="e.g. calmed a difficult client call and helped the whole team"
-            value={personDetails}
-            onChange={(event) => onPersonDetailsChange(event.target.value)}
-          />
-          <div className="flex items-center justify-between gap-3 text-xs font-bold text-[var(--text-faint)]" id="v2-details-help">
-            <span>A name, recent win, or specific quality makes the praise more personal.</span>
-            <span>{personDetails.length}/{MAX_DETAILS_LENGTH}</span>
-          </div>
+        <div>
+          <button
+            aria-expanded={showDetails}
+            className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-[var(--text-muted)] transition hover:text-[var(--text)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+            type="button"
+            onClick={() => setDetailsOpen((current) => !current)}
+          >
+            <ChevronDown aria-hidden="true" className={`size-4 transition-transform ${showDetails ? "rotate-180" : ""}`} />
+            {showDetails ? "Hide personal detail" : "Add a personal detail"}
+          </button>
+
+          {showDetails ? (
+            <div className="mt-2 space-y-2">
+              <label className="sr-only" htmlFor="v2-details">Optional details</label>
+              <textarea
+                aria-describedby="v2-details-help"
+                className="v2-input min-h-20 w-full resize-none px-4 py-3 text-sm font-medium leading-6 text-[var(--text)] outline-none"
+                id="v2-details"
+                maxLength={MAX_DETAILS_LENGTH}
+                placeholder="A recent win or something they do especially well"
+                value={personDetails}
+                onChange={(event) => onPersonDetailsChange(event.target.value)}
+              />
+              <div className="flex items-center justify-between gap-3 text-xs font-medium text-[var(--text-faint)]" id="v2-details-help">
+                <span>Optional</span>
+                <span>{personDetails.length}/{MAX_DETAILS_LENGTH}</span>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <button
-          className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--ink)] px-5 py-3 text-base font-bold text-[var(--paper)] shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-[#2a2530] disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-[#a69d99] disabled:text-[#f9f4ec] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+          className="v2-primary-button inline-flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
           disabled={!canGenerate || isGenerating}
           type="submit"
         >
           {isGenerating ? <LoaderCircle aria-hidden="true" className="size-5 animate-spin" /> : <WandSparkles aria-hidden="true" className="size-5" />}
-          {isGenerating ? "Creating your compliments..." : "Generate 3 compliments"}
+          {isGenerating ? "Creating compliments…" : "Generate 3 compliments"}
         </button>
-        <p className="text-center text-xs font-semibold text-[var(--text-faint)]" role="status">
-          {canGenerate ? "Three distinct versions, ready in a few seconds." : "Add a workplace function above to enable generation."}
+        <p className="sr-only" role="status">
+          {canGenerate ? "Ready to generate three compliments." : "Add a job or role to enable generation."}
         </p>
 
-        <div className="border-t border-[var(--line)] pt-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-bold text-[var(--text-muted)]">Need an idea?</p>
-            <button
-              aria-expanded={examplesExpanded}
-              className="text-xs font-bold text-[var(--purple)] underline decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-              type="button"
-              onClick={onToggleExamples}
-            >
-              {examplesExpanded ? "Show fewer" : `Show ${V2_EXAMPLES.length - 3} more`}
-            </button>
+        {!compact ? (
+          <div className="pt-1">
+            <p className="text-xs font-medium text-[var(--text-faint)]">Try an example</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {EXAMPLES.map((example) => (
+                <button
+                  className="v2-chip min-h-9 px-3 py-2 text-left text-xs font-medium"
+                  key={example}
+                  type="button"
+                  onClick={() => onChooseExample(example)}
+                >
+                  {example}
+                </button>
+              ))}
+            </div>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(examplesExpanded ? V2_EXAMPLES : V2_EXAMPLES.slice(0, 3)).map((example) => (
-              <button
-                className="min-h-9 rounded-[12px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:border-[var(--purple)] hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/25"
-                key={example}
-                type="button"
-                onClick={() => onChooseExample(example)}
-              >
-                {example}
-              </button>
-            ))}
-          </div>
-        </div>
+        ) : null}
       </form>
     </section>
   );

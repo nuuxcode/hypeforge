@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   BookOpen,
   History,
-  Layers3,
   LoaderCircle,
   Moon,
   RotateCcw,
@@ -61,11 +60,9 @@ const BUCKET_ACCENT: Record<PersonaBucket, string> = {
 };
 
 const LOADING_LINES = [
-  "Summoning three compliments from the Department of Excessive Admiration...",
-  "Consulting the compliment council...",
-  "Inflating the metaphor balloon...",
-  "Adding tasteful chaos...",
-  "Polishing the crown...",
+  "Writing three distinct compliments…",
+  "Adding a little wonder…",
+  "Checking every guideline…",
 ] as const;
 
 const MAX_CARD_VERSIONS = 50;
@@ -306,50 +303,14 @@ function LoadingCopy() {
   );
 }
 
-function EmptyPreview() {
-  const previews = [
-    { bucket: "grand" as const, label: "Grand", text: "Confident and generous" },
-    { bucket: "mythic" as const, label: "Mythic", text: "Warm with a little wonder" },
-    { bucket: "chaotic" as const, label: "Chaotic", text: "Playful, high-energy praise" },
-  ];
-
-  return (
-    <section className="rounded-[22px] border border-[var(--line)] bg-[var(--panel-raised)] p-5 sm:p-6" aria-label="Your future compliment deck">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Step 2 · Your deck</p>
-          <h3 className="v2-display mt-2 text-2xl font-semibold text-[var(--text)]">Your three compliments will appear here.</h3>
-          <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[var(--text-muted)]">
-            Describe someone on the left, then choose the version that feels most like them.
-          </p>
-        </div>
-        <span className="v2-mono inline-flex rounded-full border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-xs font-bold text-[var(--text-muted)]">
-          3 voices
-        </span>
-      </div>
-      <div className="mt-6 grid gap-3 border-t border-[var(--line)] pt-5 md:grid-cols-3">
-        {previews.map((preview) => (
-          <div className="flex items-start gap-3" key={preview.bucket}>
-            <span aria-hidden="true" className="mt-1.5 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: BUCKET_ACCENT[preview.bucket] }} />
-            <div>
-              <p className="v2-mono text-xs font-bold uppercase text-[var(--text)]">{preview.label}</p>
-              <p className="mt-1 text-sm font-medium leading-5 text-[var(--text-muted)]">{preview.text}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function LoadingPreview() {
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" aria-label="Creating three compliments">
       <LoadingCopy />
-      <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
+      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
         {["grand", "mythic", "chaotic"].map((bucket) => (
           <div
-            className="v2-card min-h-[330px] animate-pulse p-5"
+            className="v2-card min-h-[260px] animate-pulse p-5"
             key={bucket}
             style={
               {
@@ -374,32 +335,6 @@ function LoadingPreview() {
   );
 }
 
-function ProofStrip() {
-  const items = [
-    { icon: Layers3, title: "3 voices", text: "Grand, Mythic, and Chaotic voices keep every run varied." },
-    { icon: History, title: "Per-card memory", text: "Escalation updates one compliment without touching the others." },
-    { icon: Share2, title: "One-click copy", text: "Each finished card is ready to share." },
-  ];
-
-  return (
-    <section className="border-y border-[var(--line)] py-8" aria-label="Product proof">
-      <div className="mx-auto grid max-w-[1600px] gap-4 px-4 sm:px-6 lg:grid-cols-3 lg:px-8">
-        {items.map((item) => (
-          <div className="flex gap-4 py-3" key={item.title}>
-            <div className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--cyan)]">
-              <item.icon aria-hidden="true" className="size-5" />
-            </div>
-            <div>
-              <h3 className="v2-display text-lg font-semibold text-[var(--text)]">{item.title}</h3>
-              <p className="mt-1 text-sm font-medium leading-6 text-[var(--text-muted)]">{item.text}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export default function V2Page() {
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [input, setInput] = useState("");
@@ -416,7 +351,6 @@ export default function V2Page() {
   const [tweakCardId, setTweakCardId] = useState<string | null>(null);
   const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
   const [shareMessage, setShareMessage] = useState<string | null>(null);
-  const [examplesExpanded, setExamplesExpanded] = useState(false);
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const trimmedInput = input.trim();
@@ -1020,26 +954,23 @@ export default function V2Page() {
     [setCardCopied, setCardError],
   );
 
+  const showWorkspace = cards.length > 0 || isGenerating || Boolean(globalError);
+
   return (
-    <main className={`v2-shell min-h-dvh ${theme === "dark" ? "v2-dark" : "v2-light"}`}>
+    <main className={`v2-shell flex min-h-dvh flex-col ${theme === "dark" ? "v2-dark" : "v2-light"}`}>
       <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--chrome-bg)] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 max-w-[1600px] items-center justify-between gap-2 px-2 min-[375px]:px-3 sm:gap-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-2 sm:gap-3">
-            <div className="grid size-10 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)]">
-              <Sparkles aria-hidden="true" className="size-5 text-[var(--coral)]" />
+        <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[var(--accent-soft)]">
+              <Sparkles aria-hidden="true" className="size-4 text-[var(--accent)]" />
             </div>
-            <div className="min-w-0">
-              <p className="v2-gradient-text v2-display text-lg font-semibold min-[360px]:text-xl">HypeForge</p>
-              <p className="v2-mono hidden text-[0.68rem] uppercase text-[var(--text-faint)] sm:block">
-                AI Compliment Generator
-              </p>
-            </div>
+            <p className="v2-display text-lg font-semibold text-[var(--text)]">HypeForge</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Tooltip align="end" className="hidden min-[380px]:inline-flex" label="Compliment guide">
               <button
                 aria-label="Open compliment guide"
-                className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                className="v2-header-button"
                 type="button"
                 onClick={() => setGuideOpen(true)}
               >
@@ -1049,19 +980,18 @@ export default function V2Page() {
             <Tooltip align="end" label="Saved compliment decks">
               <button
                 aria-label="Open saved compliment decks"
-                className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
+                className="v2-header-button"
                 type="button"
                 onClick={() => setHistoryOpen(true)}
               >
                 <History aria-hidden="true" className="size-4" />
-                <span className="hidden sm:inline">Saved</span>
               </button>
             </Tooltip>
             {cards.some((card) => card.text.trim()) ? (
               <Tooltip align="end" label="Create a share link">
                 <button
                   aria-label="Share this compliment deck"
-                  className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                  className="v2-header-button"
                   type="button"
                   onClick={shareDeck}
                 >
@@ -1072,7 +1002,7 @@ export default function V2Page() {
             <Tooltip align="end" label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}>
               <button
                 aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-                className="grid size-10 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-xs font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35 sm:inline-flex sm:w-auto sm:gap-2 sm:px-3 sm:py-2"
+                className="v2-header-button"
                 type="button"
                 onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
               >
@@ -1081,48 +1011,50 @@ export default function V2Page() {
                 ) : (
                   <Sun aria-hidden="true" className="size-4" />
                 )}
-                <span className="hidden sm:inline">{theme === "light" ? "Dark" : "Light"}</span>
               </button>
             </Tooltip>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto grid max-w-[1600px] gap-6 px-4 py-6 sm:px-6 lg:items-start lg:grid-cols-[430px_minmax(0,1fr)] lg:px-8 lg:py-10">
+      <section
+        className={
+          showWorkspace
+            ? "mx-auto grid w-full max-w-[1500px] flex-1 gap-6 px-4 py-6 sm:px-6 lg:items-start lg:grid-cols-[360px_minmax(0,1fr)] lg:px-8 lg:py-8"
+            : "mx-auto flex w-full max-w-[720px] flex-1 items-start px-4 py-12 sm:px-6 sm:py-20"
+        }
+      >
         <V2InputPanel
           jobFunction={input}
           personDetails={personDetails}
           canGenerate={canGenerate}
           isGenerating={isGenerating}
-          examplesExpanded={examplesExpanded}
+          compact={showWorkspace}
           onJobFunctionChange={setInput}
           onPersonDetailsChange={setPersonDetails}
           onGenerate={generate}
-          onToggleExamples={() => setExamplesExpanded((current) => !current)}
           onChooseExample={(example) => {
             setInput(example);
             setPersonDetails("");
           }}
         />
 
+        {showWorkspace ? (
         <section className="min-w-0 scroll-mt-24 space-y-5" id="v2-deck" aria-live="polite">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-              <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">
-                {cards.length > 0 ? "Your compliment deck" : "Step 2 · Your deck"}
-              </p>
-              <h2 className="v2-display mt-1 text-3xl font-semibold text-[var(--text)]">
-                {cards.length > 0 ? "Three distinct voices" : "Your deck, ready when you are"}
+              <h2 className="v2-display text-3xl font-semibold text-[var(--text)]">
+                {cards.length > 0 ? "Choose a favorite" : "Creating your options"}
               </h2>
               <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-[var(--text-muted)]">
                 {cards.length > 0
-                  ? "Each card keeps its own memory. Make one more dramatic without changing the others."
-                  : "Your Grand, Mythic, and Chaotic compliments will appear here after you generate."}
+                  ? `Three verified compliments for ${trimmedInput}.`
+                  : "This usually takes a few seconds."}
               </p>
             </div>
             {cards.length > 0 ? (
               <button
-                className="inline-flex min-h-11 items-center gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-4 py-2 text-sm font-bold text-[var(--text)] transition hover:-translate-y-0.5 hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                className="v2-secondary-button inline-flex min-h-11 items-center gap-2 px-4 py-2 text-sm font-semibold"
                 type="button"
                 onClick={() => {
                   setCards([]);
@@ -1133,23 +1065,23 @@ export default function V2Page() {
                 }}
               >
                 <RotateCcw aria-hidden="true" className="size-4" />
-                Start over
+                New deck
               </button>
             ) : null}
           </div>
 
           {shareMessage ? (
-            <p className="rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-sm font-bold text-[var(--text)]" role="status">
+            <p className="rounded-[12px] bg-[var(--accent-soft)] px-3 py-2 text-sm font-medium text-[var(--text)]" role="status">
               {shareMessage}
             </p>
           ) : null}
 
           {globalError ? (
-            <div className="flex items-start gap-3 rounded-[18px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 p-4 text-sm font-bold text-[var(--text)]">
+            <div className="flex items-start gap-3 rounded-[14px] border border-[#ff6b5f]/30 bg-[#ff6b5f]/10 p-4 text-sm font-medium text-[var(--text)]">
               <AlertTriangle aria-hidden="true" className="mt-0.5 size-5 shrink-0 text-[var(--coral)]" />
               <p className="min-w-0 flex-1">{globalError}</p>
               <button
-                className="rounded-[12px] border border-[var(--line)] px-3 py-1 text-xs uppercase text-[var(--text-muted)] hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                className="v2-secondary-button min-h-9 px-3 text-xs font-semibold"
                 type="button"
                 onClick={() => {
                   setGlobalError(null);
@@ -1164,7 +1096,7 @@ export default function V2Page() {
           {isGenerating && cards.length === 0 ? <LoadingPreview /> : null}
 
           {cards.length > 0 ? (
-            <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
+            <div className="v2-card-grid grid items-stretch gap-4">
               {cards.map((card, index) => (
                 <V2ComplimentCard
                   card={card}
@@ -1189,22 +1121,14 @@ export default function V2Page() {
                 />
               ))}
             </div>
-          ) : !isGenerating ? (
-            <EmptyPreview />
           ) : null}
         </section>
+        ) : null}
       </section>
 
-      <ProofStrip />
-
-      <footer className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-8 text-sm font-semibold text-[var(--text-faint)] sm:px-6 lg:px-8">
-        <p className="v2-gradient-text v2-display text-lg font-semibold">HypeForge</p>
-        <div className="flex items-center gap-4">
-          <Link className="text-[var(--text-muted)] underline decoration-[var(--purple)] decoration-2 underline-offset-4 transition hover:text-[var(--text)]" href="/compliment-guide">
-            Compliment guide
-          </Link>
-          <p>Built for playful praise. No account needed.</p>
-        </div>
+      <footer className="mx-auto flex w-full max-w-[1500px] items-center justify-between gap-3 border-t border-[var(--line)] px-4 py-5 text-xs font-medium text-[var(--text-faint)] sm:px-6 lg:px-8">
+        <p>HypeForge</p>
+        <Link className="transition hover:text-[var(--text)]" href="/compliment-guide">Compliment guide</Link>
       </footer>
 
       <DeckHistoryDrawer

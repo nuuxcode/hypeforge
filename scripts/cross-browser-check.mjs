@@ -20,7 +20,7 @@ for (const target of targets) {
         if (message.type() === "error") consoleErrors.push(message.text());
       });
       await page.goto(`${baseUrl}/v2`, { waitUntil: "networkidle" });
-      await page.getByLabel("Job title or workplace function").fill("Product Manager");
+      await page.getByLabel("Their job or role").fill("Product Manager");
       const generateEnabled = await page.getByRole("button", { name: "Generate 3 compliments" }).isEnabled();
       await page.getByRole("button", { name: "Open compliment guide" }).click();
       await page.keyboard.press("Escape");
