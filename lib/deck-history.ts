@@ -146,10 +146,6 @@ export function truncateHistoryAt(history: string[], restoredText: string): stri
   return cutIndex >= 0 ? history.slice(0, cutIndex + 1) : [restoredText];
 }
 
-function toBase64Url(value: string): string {
-  return btoa(encodeURIComponent(value)).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
-}
-
 function fromBase64Url(value: string): string | null {
   try {
     const padded = value.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
@@ -159,27 +155,8 @@ function fromBase64Url(value: string): string | null {
   }
 }
 
-export function createShareToken(input: string, cards: ComplimentCard[]): string {
-  const deck: SharedDeckSnapshot = {
-    input,
-    jobFunction: cards[0]?.jobFunction,
-    personDetails: cards[0]?.personDetails,
-    cards: cards
-      .filter((card) => card.text.trim())
-      .map((card) => ({
-        personaId: card.personaId,
-        personaName: card.personaName,
-        text: card.text,
-        dramaLevel: card.dramaLevel,
-        originalInput: card.originalInput,
-        jobFunction: card.jobFunction,
-        personDetails: card.personDetails,
-        guidelines: card.guidelines,
-      })),
-  };
-  return toBase64Url(JSON.stringify(deck));
-}
-
+// Shares are created server-side at /api/share these days; this reader stays
+// so hash-token links shared before the slug system keep opening.
 export function readShareToken(token: string): SharedDeckSnapshot | null {
   const decoded = fromBase64Url(token);
   if (!decoded) return null;

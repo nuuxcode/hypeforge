@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSoftPreferenceContext, createShareToken, nextFeedbackVote, readShareToken, truncateHistoryAt, type TasteSignal } from "@/lib/deck-history";
+import { buildSoftPreferenceContext, nextFeedbackVote, readShareToken, truncateHistoryAt, type TasteSignal } from "@/lib/deck-history";
 import type { ComplimentCard } from "@/lib/types";
 import { COMPLIANT_GUIDELINES } from "@/tests/fixtures/guidelines";
 
@@ -47,24 +47,33 @@ const signals: TasteSignal[] = [
 ];
 
 describe("deck history helpers", () => {
-  it("round-trips a shareable deck without exposing card history or preference data", () => {
-    const token = createShareToken(card.originalInput, [card]);
-    const shared = readShareToken(token);
+  it("still reads hash share tokens created before the slug system", () => {
+    // Same encoding the retired client-side creator used.
+    const legacyToken = btoa(
+      encodeURIComponent(
+        JSON.stringify({
+          input: "Customer Success Manager",
+          cards: [
+            {
+              personaId: "epic-bard",
+              personaName: "Epic Bard",
+              text: card.text,
+              dramaLevel: 2,
+              originalInput: "Customer Success Manager",
+              guidelines: COMPLIANT_GUIDELINES,
+            },
+          ],
+        }),
+      ),
+    )
+      .replaceAll("+", "-")
+      .replaceAll("/", "_")
+      .replaceAll("=", "");
 
-    expect(shared).toEqual({
-      input: "Customer Success Manager",
-      cards: [
-        {
-          personaId: "epic-bard",
-          personaName: "Epic Bard",
-          text: card.text,
-          dramaLevel: 2,
-          originalInput: "Customer Success Manager",
-          guidelines: COMPLIANT_GUIDELINES,
-        },
-      ],
-    });
-    expect(token).not.toContain("history");
+    const shared = readShareToken(legacyToken);
+    expect(shared?.input).toBe("Customer Success Manager");
+    expect(shared?.cards).toHaveLength(1);
+    expect(shared?.cards[0]?.guidelines).toEqual(COMPLIANT_GUIDELINES);
     expect(readShareToken("not-a-deck")).toBeNull();
   });
 

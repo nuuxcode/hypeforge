@@ -8,6 +8,17 @@ export const MAX_INPUT_LENGTH = 360;
 export const MAX_DETAILS_LENGTH = 240;
 export const MAX_HISTORY_ITEMS = 10;
 
+// Prompts frame user input inside XML-style delimiters, so raw angle brackets
+// are the one character class that could break out of the data block. They add
+// nothing to a name, role, or description; drop them at normalization time.
+function normalizeUserText(value: string): string {
+  return value
+    .replace(/[<>]/g, " ")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 const INJECTION_PATTERNS = [
   /\bignore (all )?(previous|prior|above) instructions?\b/i,
   /\breveal (the )?(system|developer|hidden) (prompt|instructions?)\b/i,
@@ -84,7 +95,7 @@ export const ShareDeckBodySchema = z.object({
 });
 
 export function sanitizeInput(value: string): string {
-  const normalized = value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  const normalized = normalizeUserText(value);
   if (!normalized) {
     throw new Error("Give me a job title or person details first.");
   }
@@ -104,7 +115,7 @@ export function sanitizeInput(value: string): string {
 }
 
 export function sanitizeJobFunction(value: string): string {
-  const normalized = value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  const normalized = normalizeUserText(value);
   if (!normalized || normalized.length < MIN_INPUT_LENGTH) {
     throw new Error("Give me a job title or workplace function first.");
   }
@@ -123,7 +134,7 @@ export function sanitizeJobFunction(value: string): string {
 
 export function sanitizePersonDetails(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  const normalized = value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  const normalized = normalizeUserText(value);
   if (!normalized) return undefined;
   if (normalized.length > MAX_DETAILS_LENGTH) {
     throw new Error("Keep the optional details under 240 characters.");
@@ -161,7 +172,7 @@ export function appendHistory(history: string[], nextText: string): string[] {
 export function cleanPreferenceContext(value: SoftPreferenceContext | undefined): SoftPreferenceContext {
   const clean = (items: string[]) =>
     items
-      .map((item) => item.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 180))
+      .map((item) => normalizeUserText(item).slice(0, 180))
       .filter((item) => item.length >= 12 && !INJECTION_PATTERNS.some((pattern) => pattern.test(item)))
       .slice(0, 3);
 
@@ -169,7 +180,7 @@ export function cleanPreferenceContext(value: SoftPreferenceContext | undefined)
 }
 
 export function sanitizeTweakFeedback(value: string): string {
-  const normalized = value.replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim();
+  const normalized = normalizeUserText(value);
   if (normalized.length < 3) throw new Error("Tell the forge what to change first.");
   if (INJECTION_PATTERNS.some((pattern) => pattern.test(normalized))) {
     throw new Error("Describe the compliment change instead of giving the forge instructions.");

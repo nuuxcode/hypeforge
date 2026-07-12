@@ -54,6 +54,29 @@ import type {
   TweakResponse,
 } from "@/lib/types";
 import { MAX_HISTORY_ITEMS, MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
+import {
+  activeVersionIdFor,
+  appendCardVersion,
+  createCardVersion,
+  hydrateCard,
+  hydrateCards,
+  versionsForCard,
+} from "@/lib/card-versions";
+import {
+  CLIENT_DEBUG,
+  cardErrorMessage,
+  getDebug,
+  globalErrorMessage,
+  hasVisibleCards,
+  isApiErrorResponse,
+  isEscalateResponse,
+  isGenerateResponse,
+  isRetryResponse,
+  isShareResponse,
+  isSharedDeckResponse,
+  isTweakResponse,
+  logApiExchange,
+} from "@/lib/api-responses";
 
 const BUCKET_ACCENT: Record<PersonaBucket, string> = {
   grand: "#7050c8",
@@ -67,225 +90,9 @@ const LOADING_LINES = [
   "Checking every guideline…",
 ] as const;
 
-const MAX_CARD_VERSIONS = 50;
-const CLIENT_DEBUG = process.env.NODE_ENV !== "production";
-
-type RetryResponse = {
-  ok?: true;
-  text: string;
-  history: string[];
-  dramaLevel: number;
-  guidelines: GuidelineCompliance;
-  debug?: ApiDebug;
-};
-
-type ShareResponse = {
-  ok?: true;
-  slug: string;
-  createdAt: string;
-  debug?: ApiDebug;
-};
-
-type SharedDeckResponse = {
-  ok?: true;
-  deck: SharedDeckSnapshot;
-};
-
 type CardVersionPanel = Record<string, boolean>;
 
 type ThemeMode = "light" | "dark";
-
-function isGenerateResponse(value: unknown): value is GenerateResponse {
-  return Boolean(value && typeof value === "object" && Array.isArray((value as GenerateResponse).cards));
-}
-
-function isGuidelineCompliance(value: unknown): value is GuidelineCompliance {
-  if (!value || typeof value !== "object") return false;
-  const compliance = value as GuidelineCompliance;
-  return (
-    compliance.version === "2.1" &&
-    typeof compliance.wordCount === "number" &&
-    compliance.wordCount <= 40 &&
-    Array.isArray(compliance.checks) &&
-    compliance.checks.length === 8 &&
-    compliance.checks.every((item) => item.state === "pass")
-  );
-}
-
-function isEscalateResponse(value: unknown): value is EscalateResponse {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      typeof (value as EscalateResponse).text === "string" &&
-      Array.isArray((value as EscalateResponse).history) &&
-      typeof (value as EscalateResponse).dramaLevel === "number" &&
-      isGuidelineCompliance((value as EscalateResponse).guidelines),
-  );
-}
-
-function isRetryResponse(value: unknown): value is RetryResponse {
-  return isEscalateResponse(value);
-}
-
-function isTweakResponse(value: unknown): value is TweakResponse {
-  return isEscalateResponse(value);
-}
-
-function isShareResponse(value: unknown): value is ShareResponse {
-  return Boolean(value && typeof value === "object" && typeof (value as ShareResponse).slug === "string");
-}
-
-function isSharedDeckResponse(value: unknown): value is SharedDeckResponse {
-  if (!value || typeof value !== "object") return false;
-  const deck = (value as SharedDeckResponse).deck;
-  return Boolean(deck && typeof deck.input === "string" && Array.isArray(deck.cards));
-}
-
-function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      (value as ApiErrorResponse).ok === false &&
-      typeof (value as ApiErrorResponse).error === "string",
-  );
-}
-
-function hasVisibleCards(value: unknown): value is { cards: ComplimentCardType[] } {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      Array.isArray((value as { cards?: unknown }).cards) &&
-      (value as { cards: ComplimentCardType[] }).cards.length > 0,
-  );
-}
-
-function getDebug(value: unknown): ApiDebug | undefined {
-  if (value && typeof value === "object" && "debug" in value) {
-    return (value as { debug?: ApiDebug }).debug;
-  }
-  return undefined;
-}
-
-function globalErrorMessage(body: unknown): string {
-  if (isApiErrorResponse(body) && body.error.includes("Too much brilliance")) {
-    return "Too much brilliance at once. Give it a second.";
-  }
-  if (isApiErrorResponse(body) && body.error.includes("Add someone")) {
-    return "Add someone to hype first.";
-  }
-  return "The forge hiccuped. The compliment engine got overwhelmed by your brilliance. Try again.";
-}
-
-function cardErrorMessage(body: unknown): string {
-  if (isApiErrorResponse(body) && body.error.includes("Too much brilliance")) {
-    return "Too much brilliance at once. Give it a second.";
-  }
-  return "This persona lost the plot for a second. Retry this card.";
-}
-
-function logApiExchange(args: {
-  endpoint: string;
-  payload: unknown;
-  status?: number;
-  ok?: boolean;
-  body?: unknown;
-  startedAt: number;
-  error?: unknown;
-}) {
-  if (!CLIENT_DEBUG) return;
-  const elapsedMs = Math.round(performance.now() - args.startedAt);
-  const debug = getDebug(args.body);
-  const requestId = debug?.requestId ?? "no-request-id";
-  const statusLabel = args.status ? `${args.status}` : "network-error";
-  const okLabel = args.ok ? "ok" : "failed";
-  const providerFailures =
-    debug?.events.filter((event) => event.scope === "provider" && event.level === "error") ?? [];
-
-  console.groupCollapsed(`[HypeForge V2 API] ${args.endpoint} ${statusLabel} ${okLabel} ${requestId} ${elapsedMs}ms`);
-  console.log("Request payload", args.payload);
-  if (args.body !== undefined) console.log("Response body", args.body);
-  if (args.error) console.error("Network/client error", args.error);
-  if (debug) {
-    console.log("Server debug", debug);
-    console.table(
-      debug.events.map((event) => ({
-        time: event.timestamp,
-        level: event.level,
-        scope: event.scope,
-        message: event.message,
-      })),
-    );
-  }
-  if (!args.ok) console.warn("Handled API failure", { status: args.status, body: args.body, error: args.error });
-  console.groupEnd();
-
-  // Keep raw-but-redacted Gemini failures visible without expanding the request group.
-  for (const event of providerFailures) {
-    console.error(`[HypeForge V2 Gemini] ${event.message}`, {
-      requestId,
-      route: debug?.route,
-      details: event.details,
-    });
-  }
-}
-
-function createCardVersion(
-  text: string,
-  dramaLevel: number,
-  kind: ComplimentCardVersion["kind"],
-  guidelines?: GuidelineCompliance,
-): ComplimentCardVersion {
-  return {
-    id: crypto.randomUUID(),
-    text,
-    dramaLevel,
-    kind,
-    createdAt: new Date().toISOString(),
-    guidelines,
-  };
-}
-
-function versionsForCard(card: ComplimentCardType): ComplimentCardVersion[] {
-  if (card.versions?.length) return card.versions;
-  const versions = card.history.length > 0 ? card.history : card.text ? [card.text] : [];
-  return versions.map((text, index) =>
-    createCardVersion(
-      text,
-      index === 0 ? 1 : Math.min(card.dramaLevel, index + 1),
-      index === 0 ? "generated" : "dramatic",
-      text === card.text ? card.guidelines : undefined,
-    ),
-  );
-}
-
-function appendCardVersion(card: ComplimentCardType, version: ComplimentCardVersion): ComplimentCardVersion[] {
-  return [...versionsForCard(card), version].slice(-MAX_CARD_VERSIONS);
-}
-
-function activeVersionIdFor(card: ComplimentCardType, versions: ComplimentCardVersion[]): string | undefined {
-  if (card.activeVersionId && versions.some((version) => version.id === card.activeVersionId)) return card.activeVersionId;
-  return [...versions]
-    .reverse()
-    .find((version) => version.text === card.text && version.dramaLevel === card.dramaLevel)?.id ?? versions.at(-1)?.id;
-}
-
-function hydrateCard(card: ComplimentCardType): ComplimentCardType {
-  const versions = versionsForCard(card);
-  const activeVersionId = activeVersionIdFor(card, versions);
-  const activeVersion = versions.find((version) => version.id === activeVersionId);
-  return {
-    ...card,
-    status: "idle",
-    copied: false,
-    versions,
-    activeVersionId,
-    guidelines: activeVersion?.guidelines,
-  };
-}
-
-function hydrateCards(cards: ComplimentCardType[]): ComplimentCardType[] {
-  return cards.map(hydrateCard);
-}
 
 function LoadingCopy() {
   const [index, setIndex] = useState(0);
