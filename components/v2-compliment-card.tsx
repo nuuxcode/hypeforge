@@ -14,6 +14,7 @@ import {
   ThumbsDown,
   ThumbsUp,
   WandSparkles,
+  X,
 } from "lucide-react";
 import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
@@ -204,92 +205,6 @@ export function V2ComplimentCard({
           ) : null}
         </div>
 
-        {versionsOpen ? (
-          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`${card.personaName} version history`}>
-            <div className="flex items-center justify-between gap-3">
-              <p className="v2-mono text-[0.68rem] font-bold uppercase text-[var(--ink-muted)]">Version history</p>
-              <span className="text-xs font-bold text-[var(--ink-muted)]">{versions.length} saved</span>
-            </div>
-            <div className="mt-3 space-y-2">
-              {[...versions].reverse().map((version) => {
-                const isCurrentVersion = version.id === activeVersionId;
-                const isExpanded = Boolean(expandedVersionIds[version.id]);
-                return (
-                  <div className="rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] p-3" key={version.id}>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-bold uppercase text-[var(--ink-muted)]">
-                        {version.kind} · Drama {String(version.dramaLevel).padStart(2, "0")}
-                      </p>
-                      {isCurrentVersion ? (
-                        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-[10px] bg-[var(--accent-soft)] px-2.5 text-xs font-semibold text-[var(--accent)]">
-                          <Check aria-hidden="true" className="size-3.5" />
-                          Current
-                        </span>
-                      ) : (
-                        <button
-                          className="inline-flex min-h-8 items-center gap-1.5 rounded-[10px] border border-[var(--line-strong)] bg-[var(--control-bg)] px-2.5 text-xs font-semibold text-[var(--text)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
-                          type="button"
-                          onClick={() => onRestoreVersion(card.id, version)}
-                        >
-                          <RotateCcw aria-hidden="true" className="size-3.5" />
-                          Restore
-                        </button>
-                      )}
-                    </div>
-                    <p className={`mt-2 text-sm font-medium leading-5 text-[var(--ink-muted)] ${isExpanded ? "" : "line-clamp-3"}`}>
-                      {version.text}
-                    </p>
-                    <p className="mt-2 text-xs font-bold text-[var(--ink-muted)]">
-                      {version.guidelines
-                        ? `Guidelines v${version.guidelines.version} · ${version.guidelines.checks.filter((item) => item.state === "pass").length}/8 · ${version.guidelines.wordCount}/40 words`
-                        : "Generated before Guidelines v2.1 · Not verified"}
-                    </p>
-                    <button
-                      aria-expanded={isExpanded}
-                      className="mt-2 text-xs font-bold text-[var(--ink)] underline decoration-[var(--purple)] decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                      type="button"
-                      onClick={() => setExpandedVersionIds((current) => ({ ...current, [version.id]: !current[version.id] }))}
-                    >
-                      {isExpanded ? "Show less" : "Read full"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        {tweakOpen && hasText ? (
-          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`Tweak ${card.personaName} compliment`}>
-            <label className="v2-mono text-[0.68rem] uppercase text-[var(--ink-muted)]" htmlFor={`tweak-${card.id}`}>
-              What should change?
-            </label>
-            <textarea
-              className="mt-2 min-h-24 w-full resize-y rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] px-3 py-3 text-sm font-semibold leading-5 text-[var(--ink)] outline-none focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
-              id={`tweak-${card.id}`}
-              maxLength={240}
-              placeholder="e.g. shorter, warmer, less cosmic, mention their calm under pressure"
-              value={tweakValue}
-              onChange={(event) => onTweakValueChange(card.id, event.target.value)}
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <span className="text-xs font-bold text-[var(--ink-muted)]">{tweakValue.length}/240</span>
-              <button
-                className="v2-tweak-submit inline-flex min-h-10 items-center gap-2 rounded-[12px] bg-[var(--ink)] px-3 text-sm font-bold text-[var(--paper)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
-                disabled={isLoading || tweakValue.trim().length < 3}
-                type="button"
-                onClick={() => {
-                  playForgeSound("charge");
-                  onTweak(card.id);
-                }}
-              >
-                {pendingAction === "tweak" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}
-                {pendingAction === "tweak" ? "Applying your note…" : "Regenerate with note"}
-              </button>
-            </div>
-          </section>
-        ) : null}
-
         <div className="mt-auto grid gap-2 sm:grid-cols-2 lg:grid-cols-1 min-[1500px]:grid-cols-2">
           {hasText ? (
             <button
@@ -383,7 +298,7 @@ export function V2ComplimentCard({
             <button
               aria-expanded={versionsOpen}
               aria-label={`Open ${card.personaName} version history`}
-              className={toolClass}
+              className={`${toolClass} ${versionsOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : ""}`}
               disabled={versions.length === 0 || isLoading}
               type="button"
               onClick={() => onToggleVersions(card.id)}
@@ -395,7 +310,7 @@ export function V2ComplimentCard({
             <button
               aria-expanded={tweakOpen}
               aria-label={`Tweak ${card.personaName} compliment`}
-              className={toolClass}
+              className={`${toolClass} ${tweakOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : ""}`}
               disabled={!hasText || isLoading}
               type="button"
               onClick={() => onToggleTweak(card.id)}
@@ -409,6 +324,112 @@ export function V2ComplimentCard({
             </span>
           ) : null}
         </div>
+
+        {versionsOpen ? (
+          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`${card.personaName} version history`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-baseline gap-2">
+                <p className="v2-mono text-[0.68rem] font-bold uppercase text-[var(--ink-muted)]">Version history</p>
+                <span className="text-xs font-semibold text-[var(--ink-muted)]">{versions.length} saved</span>
+              </div>
+              <button
+                aria-label={`Close ${card.personaName} version history`}
+                className="grid size-8 shrink-0 place-items-center rounded-[10px] text-[var(--ink-muted)] transition hover:bg-[var(--control-hover)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+                type="button"
+                onClick={() => onToggleVersions(card.id)}
+              >
+                <X aria-hidden="true" className="size-4" />
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              {[...versions].reverse().map((version) => {
+                const isCurrentVersion = version.id === activeVersionId;
+                const isExpanded = Boolean(expandedVersionIds[version.id]);
+                return (
+                  <div className="rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] p-3" key={version.id}>
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-xs font-bold uppercase text-[var(--ink-muted)]">
+                        {version.kind} · Drama {String(version.dramaLevel).padStart(2, "0")}
+                      </p>
+                      {isCurrentVersion ? (
+                        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-[10px] bg-[var(--accent-soft)] px-2.5 text-xs font-semibold text-[var(--accent)]">
+                          <Check aria-hidden="true" className="size-3.5" />
+                          Current
+                        </span>
+                      ) : (
+                        <button
+                          className="inline-flex min-h-8 items-center gap-1.5 rounded-[10px] border border-[var(--line-strong)] bg-[var(--control-bg)] px-2.5 text-xs font-semibold text-[var(--text)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+                          type="button"
+                          onClick={() => onRestoreVersion(card.id, version)}
+                        >
+                          <RotateCcw aria-hidden="true" className="size-3.5" />
+                          Restore
+                        </button>
+                      )}
+                    </div>
+                    <p className={`mt-2 text-sm font-medium leading-5 text-[var(--ink-muted)] ${isExpanded ? "" : "line-clamp-3"}`}>
+                      {version.text}
+                    </p>
+                    <p className="mt-2 text-xs font-bold text-[var(--ink-muted)]">
+                      {version.guidelines
+                        ? `Guidelines v${version.guidelines.version} · ${version.guidelines.checks.filter((item) => item.state === "pass").length}/8 · ${version.guidelines.wordCount}/40 words`
+                        : "Generated before Guidelines v2.1 · Not verified"}
+                    </p>
+                    <button
+                      aria-expanded={isExpanded}
+                      className="mt-2 text-xs font-bold text-[var(--ink)] underline decoration-[var(--purple)] decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                      type="button"
+                      onClick={() => setExpandedVersionIds((current) => ({ ...current, [version.id]: !current[version.id] }))}
+                    >
+                      {isExpanded ? "Show less" : "Read full"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
+
+        {tweakOpen && hasText ? (
+          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`Tweak ${card.personaName} compliment`}>
+            <div className="flex items-center justify-between gap-3">
+              <label className="v2-mono text-[0.68rem] uppercase text-[var(--ink-muted)]" htmlFor={`tweak-${card.id}`}>
+                What should change?
+              </label>
+              <button
+                aria-label={`Close ${card.personaName} tweak panel`}
+                className="grid size-8 shrink-0 place-items-center rounded-[10px] text-[var(--ink-muted)] transition hover:bg-[var(--control-hover)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+                type="button"
+                onClick={() => onToggleTweak(card.id)}
+              >
+                <X aria-hidden="true" className="size-4" />
+              </button>
+            </div>
+            <textarea
+              className="mt-2 min-h-24 w-full resize-y rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] px-3 py-3 text-sm font-semibold leading-5 text-[var(--ink)] outline-none focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
+              id={`tweak-${card.id}`}
+              maxLength={240}
+              placeholder="e.g. shorter, warmer, less cosmic, mention their calm under pressure"
+              value={tweakValue}
+              onChange={(event) => onTweakValueChange(card.id, event.target.value)}
+            />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <span className="text-xs font-bold text-[var(--ink-muted)]">{tweakValue.length}/240</span>
+              <button
+                className="v2-tweak-submit inline-flex min-h-10 items-center gap-2 rounded-[12px] bg-[var(--ink)] px-3 text-sm font-bold text-[var(--paper)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
+                disabled={isLoading || tweakValue.trim().length < 3}
+                type="button"
+                onClick={() => {
+                  playForgeSound("charge");
+                  onTweak(card.id);
+                }}
+              >
+                {pendingAction === "tweak" ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}
+                {pendingAction === "tweak" ? "Applying your note…" : "Regenerate with note"}
+              </button>
+            </div>
+          </section>
+        ) : null}
       </div>
     </article>
   );

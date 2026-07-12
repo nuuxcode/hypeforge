@@ -935,13 +935,17 @@ export default function V2Page() {
                   onSetFeedback={setCardFeedback}
                   onRestoreVersion={restoreCardVersion}
                   versionsOpen={Boolean(versionPanels[card.id])}
-                  onToggleVersions={(cardId) =>
-                    setVersionPanels((current) => ({ ...current, [cardId]: !current[cardId] }))
-                  }
+                  onToggleVersions={(cardId) => {
+                    setTweakCardId(null);
+                    setVersionPanels((current) => (current[cardId] ? {} : { [cardId]: true }));
+                  }}
                   tweakOpen={tweakCardId === card.id}
                   tweakValue={tweakDrafts[card.id] ?? ""}
                   pendingAction={pendingCardActions[card.id]}
-                  onToggleTweak={(cardId) => setTweakCardId((current) => (current === cardId ? null : cardId))}
+                  onToggleTweak={(cardId) => {
+                    setVersionPanels({});
+                    setTweakCardId((current) => (current === cardId ? null : cardId));
+                  }}
                   onTweakValueChange={(cardId, value) =>
                     setTweakDrafts((current) => ({ ...current, [cardId]: value }))
                   }
