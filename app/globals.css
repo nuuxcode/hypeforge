@@ -319,7 +319,8 @@ textarea {
   .v2-card,
   .v2-card-enter,
   .v2-card[data-loading="true"],
-  .v2-confetti i {
+  .v2-confetti i,
+  .animate-pulse {
     animation: none;
   }
 

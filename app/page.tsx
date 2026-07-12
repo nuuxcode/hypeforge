@@ -72,6 +72,10 @@ const BUCKET_ACCENT: Record<PersonaBucket, string> = {
   chaotic: "#ff6b5f",
 };
 
+function preferredScrollBehavior(): ScrollBehavior {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
 const LOADING_LINES = [
   "Writing three distinct compliments…",
   "Adding a little wonder…",
@@ -301,7 +305,7 @@ export default function V2Page() {
 
   const focusDeck = useCallback(() => {
     window.requestAnimationFrame(() => {
-      document.getElementById("v2-deck")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      document.getElementById("v2-deck")?.scrollIntoView({ behavior: preferredScrollBehavior(), block: "start" });
     });
   }, []);
 
@@ -641,7 +645,7 @@ export default function V2Page() {
     setCurrentDeckId(entry.id);
     setGlobalError(null);
     setHistoryOpen(false);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: preferredScrollBehavior() });
   }, []);
 
   const shareDeck = useCallback(async () => {
