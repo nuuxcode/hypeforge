@@ -155,7 +155,7 @@ const PUBLIC_FIGURE_COMPARISON_PATTERN =
 const UNSAFE_WORKPLACE_PATTERN =
   /\b(?:fuck|shit|bitch|bastard|sexy|naked|nude|kill|murder|slaughter|racial slur|idiot|moron|worthless)\b/i;
 const STATISTIC_PATTERN =
-  /(?:\b(?:top\s+)?\d+(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+)/i;
+  /(?:\b(?:top\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+)/i;
 
 function normalize(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -164,6 +164,11 @@ function normalize(value: string): string {
 function containsQuote(text: string, evidence: string): boolean {
   const quote = normalize(evidence);
   return quote.length >= 3 && normalize(text).includes(quote);
+}
+
+function statisticEvidence(text: string, suppliedEvidence: string): string {
+  if (containsQuote(text, suppliedEvidence) && STATISTIC_PATTERN.test(suppliedEvidence)) return suppliedEvidence;
+  return text.match(STATISTIC_PATTERN)?.[0]?.trim() ?? suppliedEvidence;
 }
 
 function subjectTokens(input: string): string[] {
@@ -223,8 +228,9 @@ export function verifyGuidelineOutput(
   const functionGrounded = groundedTokens.some((token) => normalize(raw.evidence.functionReference).includes(token));
   const subjectHasFunction = hasFunctionContext(subject) || subject.trim().split(/\s+/).length >= 2;
   const metaphorEvidencePresent = containsQuote(text, raw.evidence.absurdMetaphor);
-  const statisticEvidencePresent = containsQuote(text, raw.evidence.madeUpStatistic);
-  const statisticLooksValid = STATISTIC_PATTERN.test(raw.evidence.madeUpStatistic);
+  const resolvedStatisticEvidence = statisticEvidence(text, raw.evidence.madeUpStatistic);
+  const statisticEvidencePresent = containsQuote(text, resolvedStatisticEvidence);
+  const statisticLooksValid = STATISTIC_PATTERN.test(resolvedStatisticEvidence);
   const appearanceGuardClear = !APPEARANCE_PATTERN.test(text);
   const publicFigureGuardClear = !PUBLIC_FIGURE_COMPARISON_PATTERN.test(text);
   const workplaceGuardClear = !UNSAFE_WORKPLACE_PATTERN.test(text);
@@ -272,7 +278,7 @@ export function verifyGuidelineOutput(
       source: statisticLooksValid ? "evidence" : "heuristic",
       state:
         claimed.has("made-up-statistic") && statisticEvidencePresent && statisticLooksValid ? "pass" : "fail",
-      evidence: raw.evidence.madeUpStatistic,
+      evidence: resolvedStatisticEvidence,
       note: statisticLooksValid ? "Fictional numeric statistic detected" : "No statistic pattern detected",
     }),
     check({

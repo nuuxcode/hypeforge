@@ -55,6 +55,7 @@ describe("generateCompliantCompliment", () => {
     expect(result.guidelines.checks.every((check) => check.state === "pass")).toBe(true);
     expect(generateGuidelineCandidate).toHaveBeenCalledTimes(2);
     expect(vi.mocked(generateGuidelineCandidate).mock.calls[1]?.[0]).toHaveLength(2);
+    expect(vi.mocked(generateGuidelineCandidate).mock.calls[1]?.[1]).toMatchObject({ temperature: 0.75 });
   });
 
   it("repairs output that uses the wrong delivery point of view", async () => {
@@ -87,6 +88,21 @@ describe("generateCompliantCompliment", () => {
 
     await expect(generateCompliantCompliment(baseArgs())).rejects.toBeInstanceOf(GuidelineComplianceError);
     expect(generateGuidelineCandidate).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives statistic failures an explicit repair template", async () => {
+    const missingStatistic = {
+      ...COMPLIANT_MODEL_OUTPUT,
+      text: COMPLIANT_MODEL_OUTPUT.text.replace("99.7% of impossible requests", "an impossible amount of requests"),
+      evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, madeUpStatistic: "an impossible amount" },
+    };
+    vi.mocked(generateGuidelineCandidate)
+      .mockResolvedValueOnce(missingStatistic)
+      .mockResolvedValueOnce(COMPLIANT_MODEL_OUTPUT);
+
+    await expect(generateCompliantCompliment(baseArgs())).resolves.toMatchObject({ guidelines: { version: "2.1" } });
+    expect(JSON.stringify(vi.mocked(generateGuidelineCandidate).mock.calls[1]?.[0])).toContain("97 percent of");
+    expect(JSON.stringify(vi.mocked(generateGuidelineCandidate).mock.calls[1]?.[0])).toContain("evidence.madeUpStatistic");
   });
 
   it("repairs malformed output once but skips repair for quota failures", async () => {

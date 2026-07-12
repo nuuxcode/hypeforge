@@ -27,6 +27,30 @@ describe("Company Compliment Guidelines v2.1", () => {
     );
 
     expect(writtenPercent.guidelines.checks.find((check) => check.id === "made-up-statistic")?.state).toBe("pass");
+
+    const commaPercent = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        text: COMPLIANT_MODEL_OUTPUT.text.replace("99.7%", "7,000 percent"),
+        evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, madeUpStatistic: "7,000 percent of impossible requests" },
+      },
+      "Customer Success Manager",
+    );
+    expect(commaPercent.guidelines.checks.find((check) => check.id === "made-up-statistic")?.state).toBe("pass");
+  });
+
+  it("extracts exact statistic evidence from valid compliment text when model evidence drifts", () => {
+    const verified = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, madeUpStatistic: "almost every impossible request" },
+      },
+      "Customer Success Manager",
+    );
+
+    const statistic = verified.guidelines.checks.find((check) => check.id === "made-up-statistic");
+    expect(statistic?.state).toBe("pass");
+    expect(statistic?.evidence).toBe("99.7%");
   });
 
   it("accepts a fully grounded compliant compliment", () => {
@@ -40,7 +64,9 @@ describe("Company Compliment Guidelines v2.1", () => {
   });
 
   it("fails deterministic and evidence rules even when the model claims they passed", () => {
-    const text = COMPLIANT_TEXT.replace("cosmic", "literally cosmic");
+    const text = COMPLIANT_TEXT
+      .replace("cosmic", "literally cosmic")
+      .replace("99.7% of impossible requests", "an impossible amount of requests");
     const verified = verifyGuidelineOutput(
       {
         ...COMPLIANT_MODEL_OUTPUT,

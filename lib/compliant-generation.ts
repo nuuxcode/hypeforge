@@ -43,6 +43,9 @@ function repairInstruction(args: {
   schemaFailure?: string;
   extraFailures?: string[];
 }): ModelMessage {
+  const failedRuleIds = args.guidelines
+    ? failedGuidelineChecks(args.guidelines).map((item) => item.id)
+    : [];
   const guidelineFailures = args.guidelines
     ? failedGuidelineChecks(args.guidelines)
         .map((item) => `- ${item.id}: ${item.note ?? "rule did not pass"}`)
@@ -51,6 +54,17 @@ function repairInstruction(args: {
   const failures = [guidelineFailures, ...(args.extraFailures ?? []).map((item) => `- ${item}`)]
     .filter(Boolean)
     .join("\n");
+  const targetedHints = [
+    failedRuleIds.includes("made-up-statistic")
+      ? '- For made-up-statistic: include a numeral using the exact format "97 percent of ...", then copy that exact phrase into evidence.madeUpStatistic.'
+      : undefined,
+    failedRuleIds.includes("job-function")
+      ? "- For job-function: repeat the supplied title or workplace function verbatim, then quote it exactly in evidence.functionReference."
+      : undefined,
+    failedRuleIds.includes("max-40-words")
+      ? "- For max-40-words: rewrite to 34-38 whitespace-separated words before returning the object."
+      : undefined,
+  ].filter((item): item is string => Boolean(item));
 
   return {
     role: "user",
@@ -58,6 +72,7 @@ function repairInstruction(args: {
 Subject: ${args.subject}
 ${args.previousText ? `Previous compliment: ${args.previousText}\n` : ""}Fix these failures:
 ${failures}
+${targetedHints.length > 0 ? `\nUse these exact repair instructions:\n${targetedHints.join("\n")}\n` : ""}
 
 Rewrite the compliment. Preserve the requested persona and operation, target 34 to 38 words, and return the complete structured object with fresh exact evidence.
 If dramatic-escalation failed, do not merely swap imagery: increase at least two of scale, stakes, impossible consequences, mock ceremony, or emotional intensity, and use a different metaphor category and statistic. Do not explain the correction.`,
@@ -92,7 +107,10 @@ export async function generateCompliantCompliment(args: {
     try {
       const candidate = await generateGuidelineCandidate(
         repair ? [...args.messages, repair] : args.messages,
-        { temperature: args.temperature, maxOutputTokens: args.maxOutputTokens },
+        {
+          temperature: attempt === 1 ? args.temperature : Math.min(args.temperature ?? 1, 0.75),
+          maxOutputTokens: args.maxOutputTokens,
+        },
       );
       const preliminary = verifyGuidelineOutput(candidate, args.subject);
       const semantic = failedGuidelineChecks(preliminary.guidelines).length === 0

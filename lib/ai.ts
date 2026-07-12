@@ -65,6 +65,12 @@ export function providerErrorMessage(error: unknown): string {
   if (/GEMINI_API_KEY|not set|missing/i.test(message)) {
     return "Server configuration is missing.";
   }
+  if (isQuotaError(error)) {
+    return "Gemini has reached its current quota. Wait a moment, then try again.";
+  }
+  if (/timeout|timed out|aborted|AbortError/i.test(message)) {
+    return "Gemini took too long to answer. Try again in a moment.";
+  }
   return "The compliment engine got overwhelmed by your brilliance. Try again.";
 }
 

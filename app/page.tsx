@@ -462,12 +462,12 @@ export default function V2Page() {
         });
 
         if (isApiErrorResponse(body)) {
-          setCardError(cardId, cardErrorMessage(body));
+          setCardError(cardId, cardErrorMessage(body, "escalate"));
           return;
         }
 
         if (!response.ok || !isEscalateResponse(body)) {
-          setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+          setCardError(cardId, cardErrorMessage(body, "escalate"));
           return;
         }
 
@@ -491,7 +491,7 @@ export default function V2Page() {
         persistDeck(nextCards);
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/escalate", payload, startedAt, error });
-        setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+        setCardError(cardId, cardErrorMessage(undefined, "escalate"));
       } finally {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
@@ -534,7 +534,7 @@ export default function V2Page() {
         });
 
         if (!response.ok || isApiErrorResponse(body) || !isRetryResponse(body)) {
-          setCardError(cardId, cardErrorMessage(body));
+          setCardError(cardId, cardErrorMessage(body, "retry"));
           return;
         }
 
@@ -558,7 +558,7 @@ export default function V2Page() {
         persistDeck(nextCards);
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/retry", payload, startedAt, error });
-        setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+        setCardError(cardId, cardErrorMessage(undefined, "retry"));
       } finally {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
@@ -606,7 +606,7 @@ export default function V2Page() {
         });
 
         if (!response.ok || isApiErrorResponse(body) || !isTweakResponse(body)) {
-          setCardError(cardId, cardErrorMessage(body));
+          setCardError(cardId, cardErrorMessage(body, "tweak"));
           return;
         }
 
@@ -632,7 +632,7 @@ export default function V2Page() {
         setTweakDrafts((current) => ({ ...current, [cardId]: "" }));
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/tweak", payload, startedAt, error });
-        setCardError(cardId, "This persona lost the plot for a second. Retry this card.");
+        setCardError(cardId, cardErrorMessage(undefined, "tweak"));
       } finally {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }

@@ -121,7 +121,7 @@ describe("POST /api/generate", () => {
 
     expect(response.status).toBe(200);
     expect(body.ok).toBe(false);
-    expect(body.error).toContain("overwhelmed");
+    expect(body.error).toContain("quota");
     expect(body.cards).toHaveLength(3);
     expect(body.cards.every((card: { text: string }) => card.text === "")).toBe(true);
     expect(generateCompliantCompliment).toHaveBeenCalledTimes(3);
