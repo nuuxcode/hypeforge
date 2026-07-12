@@ -4,7 +4,7 @@ Turns a job title or person description into three wildly enthusiastic, slightly
 
 ## Live Demo
 
-TBD
+[Open HypeForge](https://hypeforge-liard.vercel.app/v2)
 
 ![HypeForge showing three independently verified compliment cards](./public/hypeforge-screenshot.png)
 
