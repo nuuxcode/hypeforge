@@ -45,25 +45,52 @@ describe("prompts", () => {
     expect(messages[1]?.content).toContain("Never copy wording");
   });
 
-  it("passes prior public versions into escalation", () => {
+  it("carries prior versions as literal multi-turn conversation history", () => {
     expect(persona).not.toBeNull();
+    const versionOne = "They spot talent before the resume has finished loading.";
+    const versionTwo = "They make hiring pipelines feel like victory parades.";
     const messages = buildEscalationMessages({
       persona: persona!,
       originalInput: "Recruiter who never misses",
-      currentText: "They spot talent before the resume has finished loading.",
-      history: [
-        "They spot talent before the resume has finished loading.",
-        "They make hiring pipelines feel like victory parades.",
-      ],
+      currentText: versionTwo,
+      history: [versionOne, versionTwo],
       dramaLevel: 2,
     });
 
-    expect(messages[1]?.content).toContain("Previous versions");
-    expect(messages[1]?.content).toContain("They make hiring pipelines feel like victory parades.");
-    expect(messages[1]?.content).toContain("Do not reuse exact metaphors");
-    expect(messages[1]?.content).toContain("No markdown");
-    expect(messages[1]?.content).toContain("never exceed 40 words");
-    expect(messages[1]?.content).toContain("structured object");
-    expect(messages[1]?.content).not.toContain("220 to 360 characters");
+    // system, initial user request, assistant v1, user next-version marker,
+    // assistant v2, final user escalation instruction
+    expect(messages.map((message) => message.role)).toEqual([
+      "system",
+      "user",
+      "assistant",
+      "user",
+      "assistant",
+      "user",
+    ]);
+    expect(messages[1]?.content).toContain("untrusted subject data");
+    expect(messages[1]?.content).toContain("Recruiter who never misses");
+    expect(messages[2]?.content).toBe(versionOne);
+    expect(messages[4]?.content).toBe(versionTwo);
+
+    const finalInstruction = messages[messages.length - 1]?.content;
+    expect(finalInstruction).toContain("Target drama level: 3");
+    expect(finalInstruction).toContain("Do not reuse exact metaphors");
+    expect(finalInstruction).toContain("No markdown");
+    expect(finalInstruction).toContain("never exceed 40 words");
+    expect(finalInstruction).toContain("structured object");
+  });
+
+  it("appends the current text when a legacy history is missing it", () => {
+    const messages = buildEscalationMessages({
+      persona: persona!,
+      originalInput: "Teacher",
+      currentText: "A brand-new current compliment.",
+      history: ["An older saved version."],
+      dramaLevel: 2,
+    });
+
+    const assistantTurns = messages.filter((message) => message.role === "assistant");
+    expect(assistantTurns).toHaveLength(2);
+    expect(assistantTurns[1]?.content).toBe("A brand-new current compliment.");
   });
 });

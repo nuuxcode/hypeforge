@@ -36,7 +36,7 @@ Gemini returns a typed compliment plus exact role, metaphor, and fictional-stati
 
 ## Conversation State
 
-Each card stores the current text, public compliment history, persona id, drama level, compliance proof, loading status, and copy state. Every saved version retains its own proof, so drama navigation, saved decks, and public shares keep the matching text and verification together. Escalation sends only that card's current and previous public versions back to `/api/escalate`; level 3 therefore builds on level 2 instead of resetting. The server rebuilds the persona/system prompt from `personaId`, so hidden instructions never ship to the browser and card histories cannot contaminate one another.
+Each card stores the current text, public compliment history, persona id, drama level, compliance proof, loading status, and copy state. Every saved version retains its own proof, so drama navigation, saved decks, and public shares keep the matching text and verification together. Escalation sends only that card's versions back to `/api/escalate`, and the server replays them to the model as a literal multi-turn conversation: the original request as a user turn, each prior compliment as an assistant turn, and the new escalation instruction as the newest user turn. Level 3 therefore builds on level 2 inside a real conversation instead of a pasted summary, and the tweak feature uses the same structure. The server rebuilds the persona/system prompt from `personaId`, so hidden instructions never ship to the browser and card histories cannot contaminate one another.
 
 ## Environment
 
