@@ -5,27 +5,22 @@ import Link from "next/link";
 import {
   AlertTriangle,
   BookOpen,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  Copy,
   History,
   Layers3,
   LoaderCircle,
   Moon,
   RotateCcw,
   Share2,
-  SlidersHorizontal,
   Sparkles,
   Sun,
-  ThumbsDown,
-  ThumbsUp,
-  WandSparkles,
 } from "lucide-react";
 import { ComplimentGuideDialog } from "@/components/compliment-guide-dialog";
 import { DeckHistoryDrawer } from "@/components/deck-history-drawer";
-import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
+import { V2InputPanel } from "@/components/v2-input-panel";
+import { V2ComplimentCard } from "@/components/v2-compliment-card";
+import { fetchWithTimeout } from "@/lib/client-fetch";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   buildSoftPreferenceContext,
   clearActiveDeckId,
@@ -45,7 +40,6 @@ import {
   type SharedDeckSnapshot,
   type TasteSignal,
 } from "@/lib/deck-history";
-import { PERSONAS } from "@/lib/personas";
 import type {
   ApiDebug,
   ApiErrorResponse,
@@ -60,25 +54,11 @@ import type {
 } from "@/lib/types";
 import { MAX_HISTORY_ITEMS, MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
 
-const EXAMPLES = [
-  "Customer Success Manager",
-  "Recruiter who never misses",
-  "Founding Engineer",
-  "my friend Sara who fixes every crisis",
-  "a teacher who makes everyone believe in themselves",
-  "a product manager with impossible calendar skills",
-] as const;
-
 const BUCKET_ACCENT: Record<PersonaBucket, string> = {
   grand: "#7050c8",
   mythic: "#168a87",
   chaotic: "#ff6b5f",
 };
-
-const PERSONA_BUCKET = Object.fromEntries(PERSONAS.map((persona) => [persona.id, persona.bucket])) as Record<
-  string,
-  PersonaBucket
->;
 
 const LOADING_LINES = [
   "Summoning three compliments from the Department of Excessive Admiration...",
@@ -89,6 +69,7 @@ const LOADING_LINES = [
 ] as const;
 
 const MAX_CARD_VERSIONS = 50;
+const CLIENT_DEBUG = process.env.NODE_ENV !== "production";
 
 type RetryResponse = {
   ok?: true;
@@ -212,6 +193,7 @@ function logApiExchange(args: {
   startedAt: number;
   error?: unknown;
 }) {
+  if (!CLIENT_DEBUG) return;
   const elapsedMs = Math.round(performance.now() - args.startedAt);
   const debug = getDebug(args.body);
   const requestId = debug?.requestId ?? "no-request-id";
@@ -246,34 +228,6 @@ function logApiExchange(args: {
       details: event.details,
     });
   }
-}
-
-function fallbackCopy(text: string): void {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.top = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  document.body.removeChild(textarea);
-  if (!copied) throw new Error("Fallback copy failed");
-}
-
-function dramaButtonLabel(level: number): string {
-  if (level <= 1) return "Make it more dramatic";
-  if (level === 2) return "Make it wildly excessive";
-  if (level === 3) return "Summon the prophecy";
-  return "Launch it into mythology";
-}
-
-function badgeLabel(level: number): string {
-  return `DRAMA · ${String(level).padStart(2, "0")}`;
-}
-
-function bucketFor(card: ComplimentCardType): PersonaBucket {
-  return PERSONA_BUCKET[card.personaId] ?? "grand";
 }
 
 function createCardVersion(
@@ -332,16 +286,6 @@ function hydrateCard(card: ComplimentCardType): ComplimentCardType {
 
 function hydrateCards(cards: ComplimentCardType[]): ComplimentCardType[] {
   return cards.map(hydrateCard);
-}
-
-function styleForCard(card: ComplimentCardType, index = 0): CSSProperties {
-  const bucket = bucketFor(card);
-  const heat = Math.min(Math.max((card.dramaLevel - 1) / 3, 0), 1);
-  return {
-    "--bucket-accent": BUCKET_ACCENT[bucket],
-    "--heat": heat,
-    animationDelay: `${index * 80}ms`,
-  } as CSSProperties;
 }
 
 function LoadingCopy() {
@@ -430,320 +374,6 @@ function LoadingPreview() {
   );
 }
 
-function V2Card({
-  card,
-  index,
-  onCopy,
-  onEscalate,
-  onRetry,
-  onTweak,
-  onSetFeedback,
-  onRestoreVersion,
-  versionsOpen,
-  onToggleVersions,
-  tweakOpen,
-  tweakValue,
-  onToggleTweak,
-  onTweakValueChange,
-}: {
-  card: ComplimentCardType;
-  index: number;
-  onCopy: (cardId: string, text: string) => void;
-  onEscalate: (cardId: string) => void;
-  onRetry: (cardId: string) => void;
-  onTweak: (cardId: string) => void;
-  onSetFeedback: (cardId: string, vote: FeedbackVote) => void;
-  onRestoreVersion: (cardId: string, version: ComplimentCardVersion) => void;
-  versionsOpen: boolean;
-  onToggleVersions: (cardId: string) => void;
-  tweakOpen: boolean;
-  tweakValue: string;
-  onToggleTweak: (cardId: string) => void;
-  onTweakValueChange: (cardId: string, value: string) => void;
-}) {
-  const isLoading = card.status === "loading";
-  const hasText = card.text.trim().length > 0;
-  const bucket = bucketFor(card);
-  const versions = versionsForCard(card);
-  const activeVersionId = activeVersionIdFor(card, versions);
-  const activeVersionIndex = Math.max(versions.findIndex((version) => version.id === activeVersionId), 0);
-  const earlierVersion = versions[activeVersionIndex - 1];
-  const laterVersion = versions[activeVersionIndex + 1];
-  const [expandedVersionIds, setExpandedVersionIds] = useState<Record<string, boolean>>({});
-
-  const toolClass =
-    "grid size-9 place-items-center rounded-[12px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] text-[var(--ink)] transition hover:-translate-y-0.5 hover:bg-white disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45";
-
-  return (
-    <article
-      aria-busy={isLoading}
-      className="v2-card v2-card-enter h-fit min-h-[320px] p-5 sm:p-6"
-      data-loading={isLoading ? "true" : "false"}
-      style={styleForCard(card, index)}
-    >
-      <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="v2-mono text-[0.68rem] uppercase text-[var(--ink-muted)]">Persona label</p>
-          <h2 className="v2-display mt-1 text-xl font-semibold leading-7 text-[var(--ink)]">{card.personaName}</h2>
-          <p className="v2-mono mt-2 text-[0.68rem] uppercase" style={{ color: BUCKET_ACCENT[bucket] }}>
-            {bucket}
-          </p>
-        </div>
-        <div
-          aria-label={`${badgeLabel(card.dramaLevel)}, version ${activeVersionIndex + 1} of ${versions.length}`}
-          className="v2-mono inline-flex h-9 shrink-0 items-stretch overflow-hidden rounded-full border border-[var(--dark-line)] bg-[var(--paper-secondary)] text-xs font-bold text-[var(--ink)]"
-          role="group"
-        >
-          <Tooltip align="end" label="View earlier version">
-            <button
-              aria-label={
-                earlierVersion
-                  ? `View earlier ${card.personaName} version, drama ${String(earlierVersion.dramaLevel).padStart(2, "0")}`
-                  : `No earlier ${card.personaName} version is available`
-              }
-              className="grid h-9 w-8 place-items-center border-r border-[var(--dark-line)] transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-              disabled={!earlierVersion || isLoading}
-              type="button"
-              onClick={() => earlierVersion && onRestoreVersion(card.id, earlierVersion)}
-            >
-              <ChevronDown aria-hidden="true" className="size-4" />
-            </button>
-          </Tooltip>
-          <span aria-hidden="true" className="inline-flex items-center px-2.5">
-            {badgeLabel(card.dramaLevel)}
-          </span>
-          <Tooltip align="end" label="View later version">
-            <button
-              aria-label={
-                laterVersion
-                  ? `View later ${card.personaName} version, drama ${String(laterVersion.dramaLevel).padStart(2, "0")}`
-                  : `No later ${card.personaName} version is available`
-              }
-              className="grid h-9 w-8 place-items-center border-l border-[var(--dark-line)] transition hover:bg-[var(--control-hover)] disabled:cursor-not-allowed disabled:opacity-35 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-              disabled={!laterVersion || isLoading}
-              type="button"
-              onClick={() => laterVersion && onRestoreVersion(card.id, laterVersion)}
-            >
-              <ChevronUp aria-hidden="true" className="size-4" />
-            </button>
-          </Tooltip>
-        </div>
-      </header>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2 border-y border-[var(--dark-line)] py-3">
-        <Tooltip align="start" label="Helpful: use more of this feeling">
-          <button
-            aria-label={`Like ${card.personaName} compliment`}
-            aria-pressed={card.feedback === "up"}
-            className={`${toolClass} ${card.feedback === "up" ? "border-[#446100] bg-[#d4ff66] text-[#203000]" : ""}`}
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onSetFeedback(card.id, "up")}
-          >
-            <ThumbsUp aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip align="start" label="Not for me: use less of this feeling">
-          <button
-            aria-label={`Dislike ${card.personaName} compliment`}
-            aria-pressed={card.feedback === "down"}
-            className={`${toolClass} ${card.feedback === "down" ? "border-[#ff6b5f] bg-[#ff6b5f]/15 text-[#8c2d24]" : ""}`}
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onSetFeedback(card.id, "down")}
-          >
-            <ThumbsDown aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Version history">
-          <button
-            aria-expanded={versionsOpen}
-            aria-label={`Open ${card.personaName} version history`}
-            className={toolClass}
-            disabled={versions.length === 0 || isLoading}
-            type="button"
-            onClick={() => onToggleVersions(card.id)}
-          >
-            <History aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        <Tooltip label="Tweak this card">
-          <button
-            aria-expanded={tweakOpen}
-            aria-label={`Tweak ${card.personaName} compliment`}
-            className={toolClass}
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onToggleTweak(card.id)}
-          >
-            <SlidersHorizontal aria-hidden="true" className="size-4" />
-          </button>
-        </Tooltip>
-        {card.feedback ? (
-          <span className="ml-1 text-xs font-bold text-[var(--ink-muted)]" role="status">
-            {card.feedback === "up" ? "More of this next time" : "Less of this next time"}
-          </span>
-        ) : null}
-      </div>
-
-      <div className="mt-5 space-y-6">
-        <div className="space-y-4">
-          {hasText ? (
-            <>
-              <p aria-live="polite" className="v2-display text-base font-semibold leading-6 text-[var(--ink)] sm:text-[1.05rem]">
-                {card.text}
-              </p>
-              <GuidelineProof guidelines={card.guidelines} />
-            </>
-          ) : (
-            <div className="rounded-[18px] border border-dashed border-[var(--dark-line)] bg-[var(--paper-secondary)] p-4">
-              <p className="text-sm font-bold leading-6 text-[var(--ink-muted)]">
-                {card.error ?? "This persona lost the plot for a second. Retry this card."}
-              </p>
-            </div>
-          )}
-
-          {isLoading ? (
-            <div className="flex items-center gap-2 rounded-[14px] bg-[var(--ink)] px-3 py-2 text-sm font-bold text-[var(--paper)]">
-              <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-              Increasing drama...
-            </div>
-          ) : null}
-
-          {card.error && hasText ? (
-            <div className="rounded-[14px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 px-3 py-2 text-sm font-bold text-[#7b211b]">
-              {card.error}
-            </div>
-          ) : null}
-        </div>
-
-        {versionsOpen ? (
-          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`${card.personaName} version history`}>
-            <div className="flex items-center justify-between gap-3">
-              <p className="v2-mono text-[0.68rem] font-bold uppercase text-[var(--ink-muted)]">Version history</p>
-              <span className="text-xs font-bold text-[var(--ink-muted)]">{versions.length} saved</span>
-            </div>
-            <div className="mt-3 space-y-2">
-              {[...versions].reverse().map((version) => {
-                const isCurrentVersion = version.id === activeVersionId;
-                const isExpanded = Boolean(expandedVersionIds[version.id]);
-                return (
-                  <div className="rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] p-3" key={version.id}>
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-xs font-bold uppercase text-[var(--ink-muted)]">
-                        {version.kind} · Drama {String(version.dramaLevel).padStart(2, "0")}
-                      </p>
-                      {isCurrentVersion ? (
-                        <span className="text-xs font-bold text-[var(--purple)]">Current</span>
-                      ) : (
-                        <button
-                          className="text-xs font-bold text-[var(--purple)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                          type="button"
-                          onClick={() => onRestoreVersion(card.id, version)}
-                        >
-                          Restore
-                        </button>
-                      )}
-                    </div>
-                    <p className={`mt-2 text-sm font-medium leading-5 text-[var(--ink-muted)] ${isExpanded ? "" : "line-clamp-3"}`}>
-                      {version.text}
-                    </p>
-                    <p className="mt-2 text-xs font-bold text-[var(--ink-muted)]">
-                      {version.guidelines
-                        ? `Guidelines v${version.guidelines.version} · ${version.guidelines.checks.filter((item) => item.state === "pass").length}/8 · ${version.guidelines.wordCount}/40 words`
-                        : "Generated before Guidelines v2.1 · Not verified"}
-                    </p>
-                    <button
-                      aria-expanded={isExpanded}
-                      className="mt-2 text-xs font-bold text-[var(--ink)] underline decoration-[var(--purple)] decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                      type="button"
-                      onClick={() => setExpandedVersionIds((current) => ({ ...current, [version.id]: !current[version.id] }))}
-                    >
-                      {isExpanded ? "Show less" : "Read full"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
-
-        {tweakOpen && hasText ? (
-          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`Tweak ${card.personaName} compliment`}>
-            <label className="v2-mono text-[0.68rem] uppercase text-[var(--ink-muted)]" htmlFor={`tweak-${card.id}`}>
-              What should change?
-            </label>
-            <textarea
-              className="mt-2 min-h-24 w-full resize-y rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper)] px-3 py-3 text-sm font-semibold leading-5 text-[var(--ink)] outline-none focus:border-[#8b5cf6] focus:ring-4 focus:ring-[#8b5cf6]/25"
-              id={`tweak-${card.id}`}
-              maxLength={240}
-              placeholder="e.g. shorter, warmer, less cosmic, mention their calm under pressure"
-              value={tweakValue}
-              onChange={(event) => onTweakValueChange(card.id, event.target.value)}
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <span className="text-xs font-bold text-[var(--ink-muted)]">{tweakValue.length}/240</span>
-              <button
-                className="inline-flex min-h-10 items-center gap-2 rounded-[12px] bg-[var(--ink)] px-3 text-sm font-bold text-[var(--paper)] disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
-                disabled={isLoading || tweakValue.trim().length < 3}
-                type="button"
-                onClick={() => onTweak(card.id)}
-              >
-                {isLoading ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <Sparkles aria-hidden="true" className="size-4" />}
-                Regenerate with note
-              </button>
-            </div>
-          </section>
-        ) : null}
-
-        <div className="grid gap-2 min-[1500px]:grid-cols-[minmax(0,1fr)_auto]">
-          {hasText ? (
-            <button
-              aria-label={`Make ${card.personaName} compliment more dramatic`}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--ink)] px-4 py-2 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
-              disabled={isLoading}
-              type="button"
-              onClick={() => onEscalate(card.id)}
-            >
-              {isLoading ? (
-                <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
-              ) : (
-                <WandSparkles aria-hidden="true" className="size-4" />
-              )}
-              {dramaButtonLabel(card.dramaLevel)}
-            </button>
-          ) : (
-            <button
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--ink)] px-4 py-2 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
-              disabled={isLoading}
-              type="button"
-              onClick={() => onRetry(card.id)}
-            >
-              <RotateCcw aria-hidden="true" className="size-4" />
-              Retry this card
-            </button>
-          )}
-
-          <button
-            aria-label={`Copy ${card.personaName} compliment`}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] px-4 py-2 text-sm font-bold text-[var(--ink)] transition hover:-translate-y-0.5 disabled:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/45"
-            disabled={!hasText || isLoading}
-            type="button"
-            onClick={() => onCopy(card.id, card.text)}
-          >
-            {card.copied ? (
-              <Check aria-hidden="true" className="size-4 text-[#446100]" />
-            ) : (
-              <Copy aria-hidden="true" className="size-4" />
-            )}
-            {card.copied ? "Copied!" : "Copy"}
-          </button>
-        </div>
-      </div>
-    </article>
-  );
-}
-
 function ProofStrip() {
   const items = [
     { icon: Layers3, title: "3 voices", text: "Grand, Mythic, and Chaotic voices keep every run varied." },
@@ -773,6 +403,7 @@ function ProofStrip() {
 export default function V2Page() {
   const [theme, setTheme] = useState<ThemeMode>("light");
   const [input, setInput] = useState("");
+  const [personDetails, setPersonDetails] = useState("");
   const [cards, setCards] = useState<ComplimentCardType[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
@@ -789,6 +420,7 @@ export default function V2Page() {
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const trimmedInput = input.trim();
+  const trimmedDetails = personDetails.trim();
   const canGenerate = useMemo(
     () => trimmedInput.length >= MIN_INPUT_LENGTH && trimmedInput.length <= MAX_INPUT_LENGTH,
     [trimmedInput],
@@ -796,9 +428,11 @@ export default function V2Page() {
   const tasteContext = useMemo(() => buildSoftPreferenceContext(tasteSignals), [tasteSignals]);
 
   useEffect(() => {
-    console.info("[HypeForge V2 UI] mounted", {
-      debugTip: "API calls log grouped request/response/server-debug entries here in development.",
-    });
+    if (CLIENT_DEBUG) {
+      console.info("[HypeForge V2 UI] mounted", {
+        debugTip: "API calls log grouped request/response/server-debug entries here in development.",
+      });
+    }
     const timers = copyTimers.current;
     return () => Object.values(timers).forEach((timer) => clearTimeout(timer));
   }, []);
@@ -823,6 +457,8 @@ export default function V2Page() {
           return {
             id: crypto.randomUUID(),
             originalInput: card.originalInput || sharedDeck.input,
+            jobFunction: card.jobFunction ?? sharedDeck.jobFunction ?? sharedDeck.input,
+            personDetails: card.personDetails ?? sharedDeck.personDetails,
             personaId: card.personaId,
             personaName: card.personaName,
             text,
@@ -839,6 +475,8 @@ export default function V2Page() {
         const entry: DeckHistoryEntry = {
           id: deckId,
           input: sharedDeck.input,
+          jobFunction: sharedDeck.jobFunction,
+          personDetails: sharedDeck.personDetails,
           cards: restoredCards,
           createdAt,
           updatedAt: createdAt,
@@ -846,7 +484,8 @@ export default function V2Page() {
         setDeckHistory(saveDeckHistory(entry));
         saveActiveDeckId(deckId);
         setCurrentDeckId(deckId);
-        setInput(sharedDeck.input);
+        setInput(sharedDeck.jobFunction ?? sharedDeck.cards[0]?.jobFunction ?? sharedDeck.input);
+        setPersonDetails(sharedDeck.personDetails ?? sharedDeck.cards[0]?.personDetails ?? "");
         setCards(restoredCards);
         setShareMessage("Shared deck saved to this device.");
         const location = new URL(window.location.href);
@@ -859,7 +498,7 @@ export default function V2Page() {
       if (shareSlug) {
         void (async () => {
           try {
-            const response = await fetch(`/api/share/${encodeURIComponent(shareSlug)}`);
+            const response = await fetchWithTimeout(`/api/share/${encodeURIComponent(shareSlug)}`);
             const body = (await response.json().catch(() => ({}))) as unknown;
             if (!response.ok || !isSharedDeckResponse(body)) {
               setShareMessage("This shared deck could not be loaded.");
@@ -887,7 +526,8 @@ export default function V2Page() {
         return;
       }
 
-      setInput(activeDeck.input);
+      setInput(activeDeck.jobFunction ?? activeDeck.cards[0]?.jobFunction ?? activeDeck.input);
+      setPersonDetails(activeDeck.personDetails ?? activeDeck.cards[0]?.personDetails ?? "");
       setCards(hydrateCards(activeDeck.cards));
       setCurrentDeckId(activeDeck.id);
     }, 0);
@@ -903,6 +543,8 @@ export default function V2Page() {
       const entry: DeckHistoryEntry = {
         id: deckId,
         input: nextCards[0]?.originalInput ?? trimmedInput,
+        jobFunction: nextCards[0]?.jobFunction ?? trimmedInput,
+        personDetails: nextCards[0]?.personDetails ?? (trimmedDetails || undefined),
         cards: nextCards.map(hydrateCard),
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
@@ -912,7 +554,7 @@ export default function V2Page() {
       setCurrentDeckId(deckId);
       return deckId;
     },
-    [currentDeckId, trimmedInput],
+    [currentDeckId, trimmedDetails, trimmedInput],
   );
 
   const setCardCopied = useCallback((cardId: string, copied: boolean) => {
@@ -946,10 +588,14 @@ export default function V2Page() {
     setGlobalError(null);
     setCards([]);
 
-    const payload = { input: trimmedInput, preference: tasteContext };
+    const payload = {
+      jobFunction: trimmedInput,
+      personDetails: trimmedDetails || undefined,
+      preference: tasteContext,
+    };
     const startedAt = performance.now();
     try {
-      const response = await fetch("/api/generate", {
+      const response = await fetchWithTimeout("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
@@ -996,7 +642,7 @@ export default function V2Page() {
     } finally {
       setIsGenerating(false);
     }
-  }, [focusDeck, isGenerating, persistDeck, tasteContext, trimmedInput]);
+  }, [focusDeck, isGenerating, persistDeck, tasteContext, trimmedDetails, trimmedInput]);
 
   const escalate = useCallback(
     async (cardId: string) => {
@@ -1010,13 +656,15 @@ export default function V2Page() {
       const payload = {
         personaId: card.personaId,
         originalInput: card.originalInput,
+        jobFunction: card.jobFunction,
+        personDetails: card.personDetails,
         currentText: card.text,
         history: card.history,
         dramaLevel: card.dramaLevel,
       };
       const startedAt = performance.now();
       try {
-        const response = await fetch("/api/escalate", {
+        const response = await fetchWithTimeout("/api/escalate", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
@@ -1076,10 +724,15 @@ export default function V2Page() {
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
 
-      const payload = { personaId: card.personaId, originalInput: card.originalInput };
+      const payload = {
+        personaId: card.personaId,
+        originalInput: card.originalInput,
+        jobFunction: card.jobFunction,
+        personDetails: card.personDetails,
+      };
       const startedAt = performance.now();
       try {
-        const response = await fetch("/api/retry", {
+        const response = await fetchWithTimeout("/api/retry", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
@@ -1138,6 +791,8 @@ export default function V2Page() {
       const payload = {
         personaId: card.personaId,
         originalInput: card.originalInput,
+        jobFunction: card.jobFunction,
+        personDetails: card.personDetails,
         currentText: card.text,
         history: card.history,
         dramaLevel: card.dramaLevel,
@@ -1145,7 +800,7 @@ export default function V2Page() {
       };
       const startedAt = performance.now();
       try {
-        const response = await fetch("/api/tweak", {
+        const response = await fetchWithTimeout("/api/tweak", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
@@ -1246,7 +901,8 @@ export default function V2Page() {
   );
 
   const restoreDeck = useCallback((entry: DeckHistoryEntry) => {
-    setInput(entry.input);
+    setInput(entry.jobFunction ?? entry.cards[0]?.jobFunction ?? entry.input);
+    setPersonDetails(entry.personDetails ?? entry.cards[0]?.personDetails ?? "");
     setCards(hydrateCards(entry.cards));
     saveActiveDeckId(entry.id);
     setCurrentDeckId(entry.id);
@@ -1261,18 +917,22 @@ export default function V2Page() {
 
     const payload = {
       input: shareableCards[0]?.originalInput ?? trimmedInput,
+      jobFunction: shareableCards[0]?.jobFunction ?? trimmedInput,
+      personDetails: shareableCards[0]?.personDetails ?? (trimmedDetails || undefined),
       cards: shareableCards.map((card) => ({
         personaId: card.personaId,
         personaName: card.personaName,
         text: card.text,
         dramaLevel: card.dramaLevel,
         originalInput: card.originalInput,
+        jobFunction: card.jobFunction,
+        personDetails: card.personDetails,
         guidelines: card.guidelines,
       })),
     };
     const startedAt = performance.now();
     try {
-      const response = await fetch("/api/share", {
+      const response = await fetchWithTimeout("/api/share", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
@@ -1296,11 +956,8 @@ export default function V2Page() {
       if (navigator.share) {
         await navigator.share({ title: `${payload.input} has a HypeForge deck`, text: shareText, url });
         setShareMessage("Share sheet opened.");
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
-        setShareMessage("Share link copied.");
       } else {
-        fallbackCopy(url);
+        await copyTextToClipboard(url);
         setShareMessage("Share link copied.");
       }
     } catch (error) {
@@ -1308,7 +965,7 @@ export default function V2Page() {
       logApiExchange({ endpoint: "POST /api/share", payload: { input: payload.input, cardCount: payload.cards.length }, startedAt, error });
       setShareMessage("Share link could not be copied.");
     }
-  }, [cards, trimmedInput]);
+  }, [cards, trimmedDetails, trimmedInput]);
 
   const clearSavedDecks = useCallback(() => {
     clearDeckHistory();
@@ -1329,29 +986,33 @@ export default function V2Page() {
   const copyText = useCallback(
     async (cardId: string, text: string) => {
       try {
-        console.groupCollapsed(`[HypeForge V2 UI] copy requested ${cardId}`);
-        console.log("Copy text", text);
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-        } else {
-          fallbackCopy(text);
+        if (CLIENT_DEBUG) {
+          console.groupCollapsed(`[HypeForge V2 UI] copy requested ${cardId}`);
+          console.log("Copy text", text);
         }
+        await copyTextToClipboard(text);
         setCardCopied(cardId, true);
         if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
         copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
-        console.log("Copy succeeded");
-        console.groupEnd();
+        if (CLIENT_DEBUG) {
+          console.log("Copy succeeded");
+          console.groupEnd();
+        }
       } catch {
         try {
-          fallbackCopy(text);
+          await copyTextToClipboard(text);
           setCardCopied(cardId, true);
           if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
           copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
-          console.log("Fallback copy succeeded");
-          console.groupEnd();
+          if (CLIENT_DEBUG) {
+            console.log("Fallback copy succeeded");
+            console.groupEnd();
+          }
         } catch (error) {
-          console.error("Copy failed", error);
-          console.groupEnd();
+          if (CLIENT_DEBUG) {
+            console.error("Copy failed", error);
+            console.groupEnd();
+          }
           setCardError(cardId, "Copy didn't take - select the text and copy manually.");
         }
       }
@@ -1428,95 +1089,21 @@ export default function V2Page() {
       </header>
 
       <section className="mx-auto grid max-w-[1600px] gap-6 px-4 py-6 sm:px-6 lg:items-start lg:grid-cols-[430px_minmax(0,1fr)] lg:px-8 lg:py-10">
-        <section
-          className="self-start rounded-[24px] border border-[var(--line-strong)] bg-[var(--panel)] p-5 sm:p-6 lg:sticky lg:top-24"
-          style={{ boxShadow: "var(--panel-shadow)" }}
-        >
-          <p className="v2-mono text-[0.68rem] uppercase text-[var(--cyan)]">Step 1 · Start here</p>
-          <h1 className="v2-display mt-3 text-3xl font-semibold leading-tight text-[var(--text)] sm:text-4xl">
-            Create three <span className="v2-gradient-text">distinct compliments.</span>
-          </h1>
-          <p className="mt-4 text-sm font-medium leading-6 text-[var(--text-muted)]">
-            Add a person, role, or recent win. You will get one Grand, one Mythic, and one Chaotic version.
-          </p>
-
-          <form
-            className="mt-6 space-y-4"
-            onSubmit={(event) => {
-              event.preventDefault();
-              generate();
-            }}
-          >
-            <div className="space-y-2">
-              <label className="v2-mono text-[0.68rem] uppercase text-[var(--text-muted)]" htmlFor="v2-subject">
-                Describe the person
-              </label>
-              <textarea
-                aria-describedby="v2-subject-help"
-                className="min-h-32 w-full resize-none rounded-[18px] border border-[var(--line-strong)] bg-[var(--input-bg)] px-4 py-4 text-base font-semibold leading-7 text-[var(--text)] outline-none transition placeholder:text-[var(--input-placeholder)] focus:border-[var(--purple)] focus:ring-4 focus:ring-[#8b5cf6]/20"
-                id="v2-subject"
-                maxLength={MAX_INPUT_LENGTH}
-                placeholder="e.g. Customer Success Manager who keeps every client calm"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
-                    event.preventDefault();
-                    generate();
-                  }
-                }}
-              />
-              <div className="flex items-center justify-between gap-3 text-xs font-bold text-[var(--text-faint)]" id="v2-subject-help">
-                <span>Start with a role, name, or a specific thing they do.</span>
-                <span>
-                  {input.length}/{MAX_INPUT_LENGTH}
-                </span>
-              </div>
-            </div>
-
-            <button
-              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-[14px] bg-[var(--ink)] px-5 py-3 text-base font-bold text-[var(--paper)] shadow-lg shadow-black/15 transition hover:-translate-y-0.5 hover:bg-[#2a2530] disabled:translate-y-0 disabled:cursor-not-allowed disabled:bg-[#a69d99] disabled:text-[#f9f4ec] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-              disabled={!canGenerate || isGenerating}
-              type="submit"
-            >
-              {isGenerating ? (
-                <LoaderCircle aria-hidden="true" className="size-5 animate-spin" />
-              ) : (
-                <WandSparkles aria-hidden="true" className="size-5" />
-              )}
-              {isGenerating ? "Creating your compliments..." : "Generate 3 compliments"}
-            </button>
-            <p className="text-center text-xs font-semibold text-[var(--text-faint)]" role="status">
-              {canGenerate ? "Three distinct versions, ready in a few seconds." : "Write a person above to enable generation."}
-            </p>
-
-            <div className="border-t border-[var(--line)] pt-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-xs font-bold text-[var(--text-muted)]">Need an idea?</p>
-                <button
-                  aria-expanded={examplesExpanded}
-                  className="text-xs font-bold text-[var(--purple)] underline decoration-2 underline-offset-4 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
-                  type="button"
-                  onClick={() => setExamplesExpanded((current) => !current)}
-                >
-                  {examplesExpanded ? "Show fewer" : `Show ${EXAMPLES.length - 3} more`}
-                </button>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {(examplesExpanded ? EXAMPLES : EXAMPLES.slice(0, 3)).map((example) => (
-                  <button
-                    className="min-h-9 rounded-[12px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-left text-xs font-bold text-[var(--text)] transition hover:border-[var(--purple)] hover:bg-[var(--control-hover)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/25"
-                    key={example}
-                    type="button"
-                    onClick={() => setInput(example)}
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </form>
-        </section>
+        <V2InputPanel
+          jobFunction={input}
+          personDetails={personDetails}
+          canGenerate={canGenerate}
+          isGenerating={isGenerating}
+          examplesExpanded={examplesExpanded}
+          onJobFunctionChange={setInput}
+          onPersonDetailsChange={setPersonDetails}
+          onGenerate={generate}
+          onToggleExamples={() => setExamplesExpanded((current) => !current)}
+          onChooseExample={(example) => {
+            setInput(example);
+            setPersonDetails("");
+          }}
+        />
 
         <section className="min-w-0 scroll-mt-24 space-y-5" id="v2-deck" aria-live="polite">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -1579,7 +1166,7 @@ export default function V2Page() {
           {cards.length > 0 ? (
             <div className="grid items-start gap-4 md:grid-cols-2 2xl:grid-cols-3">
               {cards.map((card, index) => (
-                <V2Card
+                <V2ComplimentCard
                   card={card}
                   index={index}
                   key={card.id}

@@ -4,6 +4,7 @@ import { ArrowUpRight, BookOpen, History, RotateCcw, Search, Trash2, X } from "l
 import { useMemo, useState } from "react";
 import { Tooltip } from "@/components/tooltip";
 import type { DeckHistoryEntry } from "@/lib/deck-history";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 function matchesQuery(entry: DeckHistoryEntry, query: string): boolean {
   const needle = query.trim().toLowerCase();
@@ -46,6 +47,7 @@ export function DeckHistoryDrawer({
 }) {
   const [query, setQuery] = useState("");
   const filtered = useMemo(() => entries.filter((entry) => matchesQuery(entry, query)), [entries, query]);
+  const dialogRef = useDialogFocus<HTMLElement>(open, onClose);
 
   if (!open) return null;
 
@@ -57,11 +59,16 @@ export function DeckHistoryDrawer({
         type="button"
         onClick={onClose}
       />
-      <aside className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-[var(--line)] bg-[var(--bg)] shadow-2xl shadow-black/20">
+      <aside
+        aria-labelledby="saved-decks-title"
+        className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-[var(--line)] bg-[var(--bg)] shadow-2xl shadow-black/20"
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <header className="flex items-center justify-between gap-4 border-b border-[var(--line)] px-5 py-4">
           <div>
             <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">Private workspace</p>
-            <h2 className="v2-display mt-1 text-xl font-semibold text-[var(--text)]">Saved compliment decks</h2>
+            <h2 className="v2-display mt-1 text-xl font-semibold text-[var(--text)]" id="saved-decks-title">Saved compliment decks</h2>
           </div>
           <Tooltip align="end" label="Close saved decks">
             <button

@@ -64,4 +64,53 @@ describe("POST /api/escalate", () => {
     expect(body.error).toContain("Invalid compliment persona");
     expect(generateCompliantCompliment).not.toHaveBeenCalled();
   });
+
+  it("compounds levels using only the selected card history", async () => {
+    const levelTwoResponse = await POST(
+      new Request("http://localhost/api/escalate", {
+        method: "POST",
+        body: JSON.stringify({
+          personaId: "epic-bard",
+          originalInput: "Customer Success Manager - calmed a difficult client call",
+          jobFunction: "Customer Success Manager",
+          personDetails: "calmed a difficult client call",
+          currentText,
+          history: [currentText],
+          dramaLevel: 1,
+        }),
+      }),
+    );
+    const levelTwo = await levelTwoResponse.json();
+
+    const levelThreeResponse = await POST(
+      new Request("http://localhost/api/escalate", {
+        method: "POST",
+        body: JSON.stringify({
+          personaId: "epic-bard",
+          originalInput: "Customer Success Manager - calmed a difficult client call",
+          jobFunction: "Customer Success Manager",
+          personDetails: "calmed a difficult client call",
+          currentText: levelTwo.text,
+          history: levelTwo.history,
+          dramaLevel: levelTwo.dramaLevel,
+        }),
+      }),
+    );
+    const levelThree = await levelThreeResponse.json();
+
+    expect(levelTwo.dramaLevel).toBe(2);
+    expect(levelThree.dramaLevel).toBe(3);
+    expect(levelThree.history).toHaveLength(3);
+    expect(generateCompliantCompliment).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        operation: "escalate",
+        subject: "Customer Success Manager",
+        previousText: levelTwo.text,
+      }),
+    );
+    const secondCall = vi.mocked(generateCompliantCompliment).mock.calls[1]?.[0];
+    expect(JSON.stringify(secondCall?.messages)).toContain("calmed a difficult client call");
+    expect(JSON.stringify(secondCall?.messages)).toContain(currentText);
+  });
 });

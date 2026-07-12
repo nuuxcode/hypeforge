@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cleanModelText, validateCompliment } from "./safeText";
+import type { SemanticEvaluation } from "./ai";
 import type {
   GuidelineCompliance,
   GuidelineRuleId,
@@ -127,7 +128,9 @@ export const GuidelineModelOutputSchema = z.object({
 export type GuidelineModelOutput = z.infer<typeof GuidelineModelOutputSchema>;
 
 const FUNCTION_CUE_PATTERN =
-  /\b(?:ceo|cto|cfo|coo|vp|hr|pm|manager|engineer|recruiter|teacher|designer|developer|founder|leader|lead|coach|analyst|writer|sales|marketing|support|success|operations|product|finance|researcher|scientist|director|executive|officer|specialist|consultant|coordinator|assistant|administrator|editor|producer|strategist|architect|accountant|lawyer|nurse|doctor|chef|mechanic|technician|intern|who|that)\b/i;
+  /\b(?:ceo|cto|cfo|coo|vp|hr|human resources|pm|manager|engineer|recruiter|teacher|cleaner|designer|developer|founder|leader|lead|coach|analyst|writer|sales|marketing|support|success|operations|product|finance|researcher|scientist|director|executive|officer|specialist|consultant|coordinator|assistant|administrator|editor|producer|strategist|architect|accountant|lawyer|nurse|doctor|chef|mechanic|technician|intern)\b/i;
+const FUNCTION_PHRASE_PATTERN =
+  /\b(?:who|that)\s+(?:fix(?:es)?|keep(?:s)?|build(?:s)?|lead(?:s)?|manage(?:s)?|teach(?:es)?|design(?:s)?|develop(?:s)?|support(?:s)?|help(?:s)?|organize(?:s)?|solve(?:s)?|handle(?:s)?|run(?:s)?|create(?:s)?|make(?:s)?|turn(?:s)?|protect(?:s)?|coordinate(?:s)?|coach(?:es)?|care(?:s)?|clean(?:s)?|sell(?:s)?|recruit(?:s)?|write(?:s)?|research(?:es)?)\b/i;
 const STOP_WORDS = new Set([
   "about",
   "after",
@@ -145,9 +148,11 @@ const STOP_WORDS = new Set([
   "without",
 ]);
 const APPEARANCE_PATTERN =
-  /\b(?:beautiful|handsome|pretty|gorgeous|attractive|appearance|looks|eyes|hair|skin|face|smile|body|height|weight)\b/i;
+  /\b(?:beautiful|handsome|pretty|gorgeous|attractive|appearance|looks?|eyes?|hair|skin|face|smile|teeth|lips|body|height|weight|tall|short|slim|curvy|clothes?|clothing|outfit|dress(?:ed)?|stylish|beard|makeup|voice)\b/i;
 const PUBLIC_FIGURE_COMPARISON_PATTERN =
   /\b(?:like|as|than|version of|rival(?:s|ing)?|outshines?)\s+(?:the\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/;
+const UNSAFE_WORKPLACE_PATTERN =
+  /\b(?:fuck|shit|bitch|bastard|sexy|naked|nude|kill|murder|slaughter|racial slur|idiot|moron|worthless)\b/i;
 const STATISTIC_PATTERN =
   /(?:\b(?:top\s+)?\d+(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+)/i;
 
@@ -168,7 +173,7 @@ function subjectTokens(input: string): string[] {
 }
 
 export function hasFunctionContext(input: string): boolean {
-  return FUNCTION_CUE_PATTERN.test(input);
+  return FUNCTION_CUE_PATTERN.test(input) || FUNCTION_PHRASE_PATTERN.test(input);
 }
 
 export function countComplimentWords(text: string): number {
@@ -200,6 +205,7 @@ function check(args: {
 export function verifyGuidelineOutput(
   raw: GuidelineModelOutput,
   subject: string,
+  semantic?: SemanticEvaluation,
 ): { text: string; guidelines: GuidelineCompliance; passed: boolean } {
   const text = cleanModelText(raw.text);
   let displaySafe = true;
@@ -214,25 +220,36 @@ export function verifyGuidelineOutput(
   const functionEvidencePresent = containsQuote(text, raw.evidence.functionReference);
   const groundedTokens = subjectTokens(subject);
   const functionGrounded = groundedTokens.some((token) => normalize(raw.evidence.functionReference).includes(token));
+  const subjectHasFunction = hasFunctionContext(subject) || subject.trim().split(/\s+/).length >= 2;
   const metaphorEvidencePresent = containsQuote(text, raw.evidence.absurdMetaphor);
   const statisticEvidencePresent = containsQuote(text, raw.evidence.madeUpStatistic);
   const statisticLooksValid = STATISTIC_PATTERN.test(raw.evidence.madeUpStatistic);
   const appearanceGuardClear = !APPEARANCE_PATTERN.test(text);
   const publicFigureGuardClear = !PUBLIC_FIGURE_COMPARISON_PATTERN.test(text);
+  const workplaceGuardClear = !UNSAFE_WORKPLACE_PATTERN.test(text);
 
   const checks: RuleCheck[] = [
     check({
       id: "no-appearance",
       source: appearanceGuardClear ? "model" : "heuristic",
       state:
-        claimed.has("no-appearance") && raw.selfChecks.noAppearance && appearanceGuardClear ? "pass" : "fail",
-      note: appearanceGuardClear ? "Model self-check" : "Appearance wording detected",
+        claimed.has("no-appearance") &&
+        raw.selfChecks.noAppearance &&
+        appearanceGuardClear &&
+        semantic?.noAppearanceReference !== false
+          ? "pass"
+          : "fail",
+      note: appearanceGuardClear
+        ? semantic
+          ? "Independent semantic audit"
+          : "Model self-check"
+        : "Appearance wording detected",
     }),
     check({
       id: "job-function",
       source: "evidence",
       state:
-        claimed.has("job-function") && functionEvidencePresent && functionGrounded && hasFunctionContext(subject)
+        claimed.has("job-function") && functionEvidencePresent && functionGrounded && subjectHasFunction
           ? "pass"
           : "fail",
       evidence: raw.evidence.functionReference,
@@ -241,7 +258,12 @@ export function verifyGuidelineOutput(
     check({
       id: "absurd-metaphor",
       source: "evidence",
-      state: claimed.has("absurd-metaphor") && metaphorEvidencePresent ? "pass" : "fail",
+      state:
+        claimed.has("absurd-metaphor") &&
+        metaphorEvidencePresent &&
+        semantic?.metaphorIsWildlyAbsurd !== false
+          ? "pass"
+          : "fail",
       evidence: raw.evidence.absurdMetaphor,
     }),
     check({
@@ -270,17 +292,31 @@ export function verifyGuidelineOutput(
       state:
         claimed.has("no-public-figure") &&
         raw.selfChecks.noPublicFigureComparison &&
-        publicFigureGuardClear
+        publicFigureGuardClear &&
+        semantic?.noRealPublicFigureComparison !== false
           ? "pass"
           : "fail",
-      note: publicFigureGuardClear ? "Model self-check" : "Real-person comparison pattern detected",
+      note: publicFigureGuardClear
+        ? semantic
+          ? "Independent semantic audit"
+          : "Model self-check"
+        : "Real-person comparison pattern detected",
     }),
     check({
       id: "workplace-appropriate",
       source: "model",
       state:
-        claimed.has("workplace-appropriate") && raw.selfChecks.workplaceAppropriate ? "pass" : "fail",
-      note: "Model self-check",
+        claimed.has("workplace-appropriate") &&
+        raw.selfChecks.workplaceAppropriate &&
+        workplaceGuardClear &&
+        semantic?.workplaceAppropriate !== false
+          ? "pass"
+          : "fail",
+      note: workplaceGuardClear
+        ? semantic
+          ? "Independent semantic audit"
+          : "Model self-check"
+        : "Unsafe workplace wording detected",
     }),
   ];
 

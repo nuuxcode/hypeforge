@@ -51,7 +51,7 @@ textarea {
   --pink: #d946a3;
   --coral: #ff6b5f;
   --lime: #d4ff66;
-  --cyan: #168a87;
+  --cyan: #0f6f6d;
   --line: rgba(17, 16, 21, 0.14);
   --line-strong: rgba(17, 16, 21, 0.24);
   --dark-line: rgba(17, 16, 21, 0.2);
@@ -85,6 +85,7 @@ textarea {
   --text: #f8f5ef;
   --text-muted: #aaa4b0;
   --text-faint: #6f6975;
+  --cyan: #70e8dd;
   --line: rgba(255, 255, 255, 0.1);
   --line-strong: rgba(255, 255, 255, 0.17);
   --control-bg: rgba(255, 255, 255, 0.04);

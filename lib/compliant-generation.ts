@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai";
-import { generateGuidelineCandidate, isQuotaError } from "./ai";
+import { evaluateGuidelineSemantics, generateGuidelineCandidate, isQuotaError } from "./ai";
 import {
   failedGuidelineChecks,
   hasFunctionContext,
@@ -29,12 +29,16 @@ function repairInstruction(args: {
   previousText?: string;
   guidelines?: GuidelineCompliance;
   schemaFailure?: string;
+  extraFailures?: string[];
 }): ModelMessage {
-  const failures = args.guidelines
+  const guidelineFailures = args.guidelines
     ? failedGuidelineChecks(args.guidelines)
         .map((item) => `- ${item.id}: ${item.note ?? "rule did not pass"}`)
         .join("\n")
     : `- structured-output: ${args.schemaFailure ?? "return valid structured output"}`;
+  const failures = [guidelineFailures, ...(args.extraFailures ?? []).map((item) => `- ${item}`)]
+    .filter(Boolean)
+    .join("\n");
 
   return {
     role: "user",
@@ -43,7 +47,8 @@ Subject: ${args.subject}
 ${args.previousText ? `Previous compliment: ${args.previousText}\n` : ""}Fix these failures:
 ${failures}
 
-Rewrite the compliment. Preserve the requested persona and operation, target 34 to 38 words, and return the complete structured object with fresh exact evidence. Do not explain the correction.`,
+Rewrite the compliment. Preserve the requested persona and operation, target 34 to 38 words, and return the complete structured object with fresh exact evidence.
+If dramatic-escalation failed, do not merely swap imagery: increase at least two of scale, stakes, impossible consequences, mock ceremony, or emotional intensity, and use a different metaphor category and statistic. Do not explain the correction.`,
   };
 }
 
@@ -55,14 +60,16 @@ export async function generateCompliantCompliment(args: {
   debug: DebugLogger;
   temperature?: number;
   maxOutputTokens?: number;
+  previousText?: string;
 }): Promise<{ text: string; guidelines: GuidelineCompliance }> {
-  if (!hasFunctionContext(args.subject)) {
+  if (!hasFunctionContext(args.subject) && args.subject.trim().split(/\s+/).length < 2) {
     throw new GuidelineComplianceError("Add the person's job title or what they do so every compliment can name their function.");
   }
 
   let repair: ModelMessage | undefined;
   let latestCompliance: GuidelineCompliance | undefined;
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
+  const maxAttempts = args.operation === "escalate" ? 3 : 2;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     args.debug.providerInfo("guideline generation attempt started", {
       operation: args.operation,
       personaId: args.personaId,
@@ -74,14 +81,26 @@ export async function generateCompliantCompliment(args: {
         repair ? [...args.messages, repair] : args.messages,
         { temperature: args.temperature, maxOutputTokens: args.maxOutputTokens },
       );
-      const verified = verifyGuidelineOutput(candidate, args.subject);
+      const preliminary = verifyGuidelineOutput(candidate, args.subject);
+      const semantic = failedGuidelineChecks(preliminary.guidelines).length === 0
+        ? await evaluateGuidelineSemantics({
+            text: preliminary.text,
+            jobFunction: args.subject,
+            previousText: args.operation === "escalate" ? args.previousText : undefined,
+          })
+        : undefined;
+      const verified = semantic ? verifyGuidelineOutput(candidate, args.subject, semantic) : preliminary;
       latestCompliance = verified.guidelines;
       const failures = failedGuidelineChecks(verified.guidelines);
+      const dramaticFailure =
+        args.operation === "escalate" && semantic?.meaningfullyMoreDramatic === false
+          ? "dramatic-escalation: the revision was not meaningfully more dramatic than the previous version"
+          : undefined;
       args.debug.providerInfo("guideline validation completed", {
         operation: args.operation,
         personaId: args.personaId,
         attempt,
-        accepted: verified.passed,
+        accepted: verified.passed && !dramaticFailure,
         wordCount: verified.guidelines.wordCount,
         failedRuleIds: failures.map((item) => item.id),
         failures: failures.map((item) => ({
@@ -90,13 +109,16 @@ export async function generateCompliantCompliment(args: {
           note: item.note,
           evidence: item.evidence,
         })),
+        semanticNotes: semantic?.notes,
+        dramaticFailure,
       });
 
-      if (verified.passed) return { text: verified.text, guidelines: verified.guidelines };
+      if (verified.passed && !dramaticFailure) return { text: verified.text, guidelines: verified.guidelines };
       repair = repairInstruction({
         subject: args.subject,
         previousText: verified.text,
         guidelines: verified.guidelines,
+        extraFailures: dramaticFailure ? [dramaticFailure] : undefined,
       });
     } catch (error) {
       args.debug.providerError("guideline generation attempt failed", {

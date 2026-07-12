@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { get, put } from "@vercel/blob";
 import { MAX_COMPLIMENT_LENGTH } from "./safeText";
 import { VerifiedGuidelineComplianceSchema } from "./compliment-guidelines";
 import type { GuidelineCompliance } from "./types";
@@ -12,11 +13,15 @@ export type SharedDeckCard = {
   text: string;
   dramaLevel: number;
   originalInput: string;
+  jobFunction?: string;
+  personDetails?: string;
   guidelines?: GuidelineCompliance;
 };
 
 export type SharedDeckSnapshot = {
   input: string;
+  jobFunction?: string;
+  personDetails?: string;
   cards: SharedDeckCard[];
 };
 
@@ -32,6 +37,15 @@ type SharedDeckStore = {
 
 const MAX_SHARED_DECKS = 500;
 const SLUG_PATTERN = /^[A-Za-z0-9_-]{8,20}$/;
+const BLOB_PREFIX = "hypeforge-shares";
+
+function usesBlobStore(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID);
+}
+
+function blobPath(slug: string): string {
+  return `${BLOB_PREFIX}/${slug}.json`;
+}
 
 function storePath(): string {
   return process.env.HYPEFORGE_SHARE_STORE_PATH ?? path.join(".data", "hypeforge-shares.json");
@@ -67,11 +81,18 @@ function normalizeSnapshot(snapshot: SharedDeckSnapshot): SharedDeckSnapshot {
       text,
       dramaLevel: card.dramaLevel,
       originalInput: originalInput || input,
+      jobFunction: card.jobFunction?.replace(/\s+/g, " ").trim() || undefined,
+      personDetails: card.personDetails?.replace(/\s+/g, " ").trim() || undefined,
       guidelines,
     };
   });
 
-  return { input, cards };
+  return {
+    input,
+    jobFunction: snapshot.jobFunction?.replace(/\s+/g, " ").trim() || cards[0]?.jobFunction,
+    personDetails: snapshot.personDetails?.replace(/\s+/g, " ").trim() || cards[0]?.personDetails,
+    cards,
+  };
 }
 
 function isPublishedDeck(value: unknown): value is PublishedDeck {
@@ -116,6 +137,22 @@ function nextSlug(existing: Set<string>): string {
 
 export async function createSharedDeck(snapshot: SharedDeckSnapshot): Promise<PublishedDeck> {
   const clean = normalizeSnapshot(snapshot);
+  if (usesBlobStore()) {
+    const deck: PublishedDeck = {
+      ...clean,
+      slug: nextSlug(new Set()),
+      createdAt: new Date().toISOString(),
+    };
+    await put(blobPath(deck.slug), JSON.stringify(deck), {
+      access: "private",
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: "application/json",
+      cacheControlMaxAge: 60,
+    });
+    return deck;
+  }
+
   const store = await readStore();
   const deck: PublishedDeck = {
     ...clean,
@@ -129,6 +166,17 @@ export async function createSharedDeck(snapshot: SharedDeckSnapshot): Promise<Pu
 
 export async function getSharedDeck(slug: string): Promise<PublishedDeck | null> {
   if (!SLUG_PATTERN.test(slug)) return null;
+  if (usesBlobStore()) {
+    const result = await get(blobPath(slug), { access: "private", useCache: false });
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
+    try {
+      const parsed = JSON.parse(await new Response(result.stream).text()) as unknown;
+      if (!isPublishedDeck(parsed)) return null;
+      return { ...parsed, ...normalizeSnapshot(parsed) };
+    } catch {
+      return null;
+    }
+  }
   const store = await readStore();
   return store.decks.find((deck) => deck.slug === slug) ?? null;
 }

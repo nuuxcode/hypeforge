@@ -1,38 +1,25 @@
 import { providerErrorMessage } from "@/lib/ai";
+import { rateLimitCookie, rateLimitHeaders, readRateLimit } from "@/lib/api-rate-limit";
 import {
   generateCompliantCompliment,
   isGuidelineComplianceError,
 } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
+import { distinctnessIssues } from "@/lib/deck-distinctness";
 import { pickOnePerBucket } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
-import { checkAndIncrement } from "@/lib/rateLimit";
 import type { ComplimentCard, Persona } from "@/lib/types";
-import { cleanPreferenceContext, GenerateBodySchema, sanitizeInput } from "@/lib/validate";
+import { cleanPreferenceContext, GenerateBodySchema, resolveSubject } from "@/lib/validate";
 import type { SoftPreferenceContext } from "@/lib/types";
-
-const COOKIE_NAME = "hypeforge_rl";
-
-function getCookie(req: Request, name: string): string | undefined {
-  const header = req.headers.get("cookie") ?? "";
-  for (const pair of header.split(";")) {
-    const [key, value] = pair.trim().split("=");
-    if (key === name) return decodeURIComponent(value);
-  }
-  return undefined;
-}
-
-function cookieHeader(value: string): string {
-  return `${COOKIE_NAME}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`;
-}
 
 async function generateForPersona(
   persona: Persona,
-  input: string,
+  subject: { jobFunction: string; personDetails?: string },
   preference: SoftPreferenceContext,
   debug: ReturnType<typeof createApiDebug>,
+  avoidCompliments: string[] = [],
 ): Promise<Pick<ComplimentCard, "text" | "guidelines">> {
-  const messages = buildInitialMessages(persona, input, preference);
+  const messages = buildInitialMessages(persona, subject, preference, avoidCompliments);
   debug.providerInfo("persona generation started", {
     personaId: persona.id,
     personaName: persona.name,
@@ -40,7 +27,7 @@ async function generateForPersona(
   try {
     const result = await generateCompliantCompliment({
       messages,
-      subject: input,
+      subject: subject.jobFunction,
       personaId: persona.id,
       operation: "generate",
       debug,
@@ -66,12 +53,14 @@ async function generateForPersona(
 
 function makeCard(
   persona: Persona,
-  input: string,
+  subject: { jobFunction: string; personDetails?: string; displayInput: string },
   result: Pick<ComplimentCard, "text" | "guidelines">,
 ): ComplimentCard {
   return {
     id: crypto.randomUUID(),
-    originalInput: input,
+    originalInput: subject.displayInput,
+    jobFunction: subject.jobFunction,
+    personDetails: subject.personDetails,
     personaId: persona.id,
     personaName: persona.name,
     text: result.text,
@@ -83,10 +72,16 @@ function makeCard(
   };
 }
 
-function makeFailedCard(persona: Persona, input: string, error: unknown): ComplimentCard {
+function makeFailedCard(
+  persona: Persona,
+  subject: { jobFunction: string; personDetails?: string; displayInput: string },
+  error: unknown,
+): ComplimentCard {
   return {
     id: crypto.randomUUID(),
-    originalInput: input,
+    originalInput: subject.displayInput,
+    jobFunction: subject.jobFunction,
+    personDetails: subject.personDetails,
     personaId: persona.id,
     personaName: persona.name,
     text: "",
@@ -119,20 +114,21 @@ export async function POST(req: Request) {
   }
   const preference = cleanPreferenceContext(body.data.preference);
   debug.info("request body parsed", {
-    inputLength: body.data.input.length,
+    jobFunctionLength: (body.data.jobFunction ?? body.data.input ?? "").length,
+    personDetailsLength: body.data.personDetails?.length ?? 0,
     likedSignals: preference.liked.length,
     dislikedSignals: preference.disliked.length,
   });
 
   let rl;
   try {
-    rl = checkAndIncrement(getCookie(req, COOKIE_NAME));
+    rl = readRateLimit(req);
   } catch (error) {
     debug.error("rate-limit configuration failed", error);
     return Response.json(withDebug({ error: "Server configuration is missing." }, debug.finish()), { status: 500 });
   }
 
-  const setCookie = cookieHeader(rl.newCookie);
+  const setCookie = rateLimitCookie(rl.newCookie);
   if (!rl.ok) {
     debug.warn("request blocked by rate limit", { resetAt: rl.resetAt });
     return Response.json(
@@ -145,9 +141,13 @@ export async function POST(req: Request) {
   }
   debug.info("rate-limit passed", { remaining: rl.remaining, resetAt: rl.resetAt });
 
-  let input: string;
+  let subject: { jobFunction: string; personDetails?: string; displayInput: string };
   try {
-    input = sanitizeInput(body.data.input);
+    subject = resolveSubject({
+      jobFunction: body.data.jobFunction,
+      personDetails: body.data.personDetails,
+      legacyInput: body.data.input,
+    });
   } catch (error) {
     debug.error("input sanitization failed", error);
     return Response.json(
@@ -155,7 +155,10 @@ export async function POST(req: Request) {
       { headers: { "Set-Cookie": setCookie } },
     );
   }
-  debug.info("input sanitized", { input });
+  debug.info("subject sanitized", {
+    jobFunctionLength: subject.jobFunction.length,
+    personDetailsLength: subject.personDetails?.length ?? 0,
+  });
 
   const selected = pickOnePerBucket();
   debug.info("selected personas", selected.map((persona) => ({
@@ -165,12 +168,37 @@ export async function POST(req: Request) {
   })));
 
   const settled = await Promise.allSettled(
-    selected.map(async (persona) => makeCard(persona, input, await generateForPersona(persona, input, preference, debug))),
+    selected.map(async (persona) =>
+      makeCard(persona, subject, await generateForPersona(persona, subject, preference, debug)),
+    ),
   );
 
   const cards = settled.map((result, index) =>
-    result.status === "fulfilled" ? result.value : makeFailedCard(selected[index]!, input, result.reason),
+    result.status === "fulfilled" ? result.value : makeFailedCard(selected[index]!, subject, result.reason),
   );
+
+  for (let index = 0; index < cards.length; index += 1) {
+    const card = cards[index]!;
+    if (card.status === "error") continue;
+    const accepted = cards.slice(0, index).filter((item) => item.status !== "error" && item.text);
+    const issues = distinctnessIssues(card, accepted);
+    if (issues.length === 0) continue;
+
+    debug.warn("deck distinctness repair started", { personaId: card.personaId, issues });
+    try {
+      const replacement = makeCard(
+        selected[index]!,
+        subject,
+        await generateForPersona(selected[index]!, subject, preference, debug, accepted.map((item) => item.text)),
+      );
+      const remainingIssues = distinctnessIssues(replacement, accepted);
+      cards[index] = remainingIssues.length === 0
+        ? replacement
+        : makeFailedCard(selected[index]!, subject, new Error(`Distinctness failed: ${remainingIssues.join(", ")}`));
+    } catch (error) {
+      cards[index] = makeFailedCard(selected[index]!, subject, error);
+    }
+  }
   debug.info("persona settlement complete", {
     successCount: cards.filter((card) => card.status === "idle").length,
     errorCount: cards.filter((card) => card.status === "error").length,
@@ -200,11 +228,7 @@ export async function POST(req: Request) {
   return Response.json(
     withDebug({ ok: true, cards }, debug.finish()),
     {
-      headers: {
-        "Set-Cookie": setCookie,
-        "X-RateLimit-Remaining": String(rl.remaining),
-        "X-RateLimit-Reset": String(rl.resetAt),
-      },
+      headers: rateLimitHeaders(rl),
     },
   );
 }

@@ -6,6 +6,8 @@ import { ComplimentCard } from "@/components/ComplimentCard";
 import { ErrorBanner } from "@/components/ErrorBanner";
 import { InputPanel } from "@/components/InputPanel";
 import { LoadingState } from "@/components/LoadingState";
+import { fetchWithTimeout } from "@/lib/client-fetch";
+import { copyTextToClipboard } from "@/lib/clipboard";
 import type {
   ApiDebug,
   ApiErrorResponse,
@@ -23,6 +25,7 @@ const EXAMPLES = [
   "A teacher who makes everyone believe in themselves",
   "A product manager with impossible calendar skills",
 ] as const;
+const CLIENT_DEBUG = process.env.NODE_ENV !== "production";
 
 function isGenerateResponse(value: unknown): value is GenerateResponse {
   return Boolean(value && typeof value === "object" && Array.isArray((value as GenerateResponse).cards));
@@ -80,6 +83,7 @@ function logApiExchange(args: {
   startedAt: number;
   error?: unknown;
 }) {
+  if (!CLIENT_DEBUG) return;
   const elapsedMs = Math.round(performance.now() - args.startedAt);
   const debug = getDebug(args.body);
   const requestId = debug?.requestId ?? "no-request-id";
@@ -118,19 +122,6 @@ function logApiExchange(args: {
   }
 }
 
-function fallbackCopy(text: string): void {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.top = "-9999px";
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand("copy");
-  document.body.removeChild(textarea);
-  if (!copied) throw new Error("Fallback copy failed");
-}
-
 export default function Page() {
   const [input, setInput] = useState("");
   const [cards, setCards] = useState<ComplimentCardType[]>([]);
@@ -145,9 +136,11 @@ export default function Page() {
   );
 
   useEffect(() => {
-    console.info("[HypeForge UI] mounted", {
-      debugTip: "API calls log grouped request/response/server-debug entries here in development.",
-    });
+    if (CLIENT_DEBUG) {
+      console.info("[HypeForge UI] mounted", {
+        debugTip: "API calls log grouped request/response/server-debug entries here in development.",
+      });
+    }
     const timers = copyTimers.current;
     return () => {
       Object.values(timers).forEach((timer) => clearTimeout(timer));
@@ -182,7 +175,7 @@ export default function Page() {
     const payload = { input: trimmedInput };
     const startedAt = performance.now();
     try {
-      const response = await fetch("/api/generate", {
+      const response = await fetchWithTimeout("/api/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
@@ -249,7 +242,7 @@ export default function Page() {
       };
       const startedAt = performance.now();
       try {
-        const response = await fetch("/api/escalate", {
+        const response = await fetchWithTimeout("/api/escalate", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload),
@@ -306,29 +299,33 @@ export default function Page() {
   const copyText = useCallback(
     async (cardId: string, text: string) => {
       try {
-        console.groupCollapsed(`[HypeForge UI] copy requested ${cardId}`);
-        console.log("Copy text", text);
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(text);
-        } else {
-          fallbackCopy(text);
+        if (CLIENT_DEBUG) {
+          console.groupCollapsed(`[HypeForge UI] copy requested ${cardId}`);
+          console.log("Copy text", text);
         }
+        await copyTextToClipboard(text);
         setCardCopied(cardId, true);
         if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
         copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
-        console.log("Copy succeeded");
-        console.groupEnd();
+        if (CLIENT_DEBUG) {
+          console.log("Copy succeeded");
+          console.groupEnd();
+        }
       } catch {
         try {
-          fallbackCopy(text);
+          await copyTextToClipboard(text);
           setCardCopied(cardId, true);
           if (copyTimers.current[cardId]) clearTimeout(copyTimers.current[cardId]);
           copyTimers.current[cardId] = setTimeout(() => setCardCopied(cardId, false), 1800);
-          console.log("Fallback copy succeeded");
-          console.groupEnd();
+          if (CLIENT_DEBUG) {
+            console.log("Fallback copy succeeded");
+            console.groupEnd();
+          }
         } catch (error) {
-          console.error("Copy failed", error);
-          console.groupEnd();
+          if (CLIENT_DEBUG) {
+            console.error("Copy failed", error);
+            console.groupEnd();
+          }
           setCardError(cardId, "Copy failed. You can still select the text manually.");
         }
       }

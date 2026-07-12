@@ -60,6 +60,8 @@ export type Persona = {
 export type ComplimentCard = {
   id: string;
   originalInput: string;
+  jobFunction?: string;
+  personDetails?: string;
   personaId: string;
   personaName: string;
   text: string;
@@ -72,6 +74,11 @@ export type ComplimentCard = {
   versions?: ComplimentCardVersion[];
   activeVersionId?: string;
   guidelines?: GuidelineCompliance;
+};
+
+export type ComplimentSubject = {
+  jobFunction: string;
+  personDetails?: string;
 };
 
 export type ApiDebugEvent = {

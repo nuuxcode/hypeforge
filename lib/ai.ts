@@ -1,5 +1,6 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, Output, type ModelMessage } from "ai";
+import { z } from "zod";
 import { GuidelineModelOutputSchema, type GuidelineModelOutput } from "./compliment-guidelines";
 
 let googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
@@ -21,6 +22,19 @@ function getModelIds() {
   const backup = process.env.GEMINI_MODEL_BACKUP ?? main;
   return { main, backup };
 }
+
+const MODEL_TIMEOUT_MS = Number(process.env.GEMINI_TIMEOUT_MS ?? 25_000);
+
+export const SemanticEvaluationSchema = z.object({
+  noAppearanceReference: z.boolean(),
+  metaphorIsWildlyAbsurd: z.boolean(),
+  noRealPublicFigureComparison: z.boolean(),
+  workplaceAppropriate: z.boolean(),
+  meaningfullyMoreDramatic: z.boolean(),
+  notes: z.array(z.string().min(1).max(160)).max(5),
+});
+
+export type SemanticEvaluation = z.infer<typeof SemanticEvaluationSchema>;
 
 function splitSystemMessages(messages: ModelMessage[]): {
   system?: string;
@@ -88,6 +102,7 @@ export async function generateGuidelineCandidate(
       temperature: options.temperature ?? 1,
       maxOutputTokens: options.maxOutputTokens ?? 260,
       maxRetries: 0,
+      abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
       providerOptions: {
         google: {
           thinkingConfig: { thinkingBudget: 0 },
@@ -119,6 +134,63 @@ export async function generateGuidelineCandidate(
         mainModel: main,
         mainError: error,
         backupModel: backup,
+        backupError,
+      });
+    }
+  }
+}
+
+export async function evaluateGuidelineSemantics(args: {
+  text: string;
+  jobFunction: string;
+  previousText?: string;
+}): Promise<SemanticEvaluation> {
+  const google = getGoogleClient();
+  const { main, backup } = getModelIds();
+  const validator = process.env.GEMINI_MODEL_VALIDATOR ?? main;
+  const prompt = `Audit one workplace compliment against Company Guidelines v2.1.
+Return only the structured evaluation. Be conservative: a rule passes only when clearly satisfied.
+Do not provide chain-of-thought. Put only short, outcome-focused reasons in notes.
+
+Job/function data: ${JSON.stringify(args.jobFunction)}
+Compliment: ${JSON.stringify(args.text)}
+${args.previousText ? `Previous version: ${JSON.stringify(args.previousText)}\nAlso decide whether the new compliment is clearly and meaningfully more dramatic, not merely reworded.` : ""}
+
+Set meaningfullyMoreDramatic to true when no previous version is supplied because that comparison is not applicable.
+
+Check for direct or indirect physical appearance references; whether the supplied metaphor is genuinely wildly absurd and connected to the work; direct or indirect comparison to any real public figure; and workplace appropriateness including no sexual, profane, discriminatory, humiliating, threatening, or graphic content.`;
+
+  const tryModel = async (modelId: string) => {
+    const result = await generateText({
+      model: google(modelId),
+      prompt,
+      temperature: 0,
+      maxOutputTokens: 220,
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+      output: Output.object({
+        schema: SemanticEvaluationSchema,
+        name: "compliment_guideline_audit",
+        description: "An independent semantic audit of one workplace compliment.",
+      }),
+    });
+    if (!result.output) throw new Error("Validator returned no structured evaluation.");
+    return result.output;
+  };
+
+  try {
+    return await tryModel(validator);
+  } catch (error) {
+    const fallback = backup === validator ? main : backup;
+    if (fallback === validator) throw combinedModelError({ mainModel: validator, mainError: error });
+    try {
+      return await tryModel(fallback);
+    } catch (backupError) {
+      throw combinedModelError({
+        mainModel: validator,
+        mainError: error,
+        backupModel: fallback,
         backupError,
       });
     }

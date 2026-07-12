@@ -3,6 +3,8 @@ import type { ComplimentCard, FeedbackVote, SoftPreferenceContext } from "./type
 export type DeckHistoryEntry = {
   id: string;
   input: string;
+  jobFunction?: string;
+  personDetails?: string;
   cards: ComplimentCard[];
   createdAt: string;
   updatedAt: string;
@@ -20,8 +22,13 @@ export type TasteSignal = {
 
 export type SharedDeckSnapshot = {
   input: string;
+  jobFunction?: string;
+  personDetails?: string;
   cards: Array<
-    Pick<ComplimentCard, "personaId" | "personaName" | "text" | "dramaLevel" | "originalInput" | "guidelines">
+    Pick<
+      ComplimentCard,
+      "personaId" | "personaName" | "text" | "dramaLevel" | "originalInput" | "jobFunction" | "personDetails" | "guidelines"
+    >
   >;
 };
 
@@ -147,6 +154,8 @@ function fromBase64Url(value: string): string | null {
 export function createShareToken(input: string, cards: ComplimentCard[]): string {
   const deck: SharedDeckSnapshot = {
     input,
+    jobFunction: cards[0]?.jobFunction,
+    personDetails: cards[0]?.personDetails,
     cards: cards
       .filter((card) => card.text.trim())
       .map((card) => ({
@@ -155,6 +164,8 @@ export function createShareToken(input: string, cards: ComplimentCard[]): string
         text: card.text,
         dramaLevel: card.dramaLevel,
         originalInput: card.originalInput,
+        jobFunction: card.jobFunction,
+        personDetails: card.personDetails,
         guidelines: card.guidelines,
       })),
   };

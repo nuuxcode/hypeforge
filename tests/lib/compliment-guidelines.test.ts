@@ -79,4 +79,51 @@ describe("Company Compliment Guidelines v2.1", () => {
     expect(hasFunctionContext("my friend Sara who fixes every crisis")).toBe(true);
     expect(hasFunctionContext("Sara")).toBe(false);
   });
+
+  it("uses independent semantic results instead of trusting generation self-checks", () => {
+    const unsafe = verifyGuidelineOutput(COMPLIANT_MODEL_OUTPUT, "Customer Success Manager", {
+      noAppearanceReference: false,
+      metaphorIsWildlyAbsurd: false,
+      noRealPublicFigureComparison: false,
+      workplaceAppropriate: false,
+      meaningfullyMoreDramatic: true,
+      notes: ["Independent evaluator rejected the semantic rules."],
+    });
+
+    expect(unsafe.passed).toBe(false);
+    expect(
+      unsafe.guidelines.checks
+        .filter((check) => check.state === "fail")
+        .map((check) => check.id),
+    ).toEqual(expect.arrayContaining([
+      "no-appearance",
+      "absurd-metaphor",
+      "no-public-figure",
+      "workplace-appropriate",
+    ]));
+  });
+
+  it("rejects broader appearance and unsafe-workplace wording deterministically", () => {
+    const appearanceText = COMPLIANT_TEXT.replace("cosmic", "stylish");
+    const appearance = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        text: appearanceText,
+        evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, absurdMetaphor: "a stylish air-traffic controller for client chaos" },
+      },
+      "Customer Success Manager",
+    );
+    expect(appearance.guidelines.checks.find((check) => check.id === "no-appearance")?.state).toBe("fail");
+
+    const unsafeText = COMPLIANT_TEXT.replace("cosmic", "murder");
+    const unsafe = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        text: unsafeText,
+        evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, absurdMetaphor: "a murder air-traffic controller for client chaos" },
+      },
+      "Customer Success Manager",
+    );
+    expect(unsafe.guidelines.checks.find((check) => check.id === "workplace-appropriate")?.state).toBe("fail");
+  });
 });

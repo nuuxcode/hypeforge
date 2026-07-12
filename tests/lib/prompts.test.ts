@@ -7,15 +7,32 @@ describe("prompts", () => {
 
   it("builds a persona-specific initial prompt", () => {
     expect(persona).not.toBeNull();
-    const messages = buildInitialMessages(persona!, "Founding Engineer");
+    const messages = buildInitialMessages(persona!, {
+      jobFunction: "Founding Engineer",
+      personDetails: "shipped the launch during a difficult week",
+    });
 
     expect(messages[0]?.content).toContain("Epic Bard");
     expect(messages[0]?.content).toContain("Company Compliment Style Guidelines");
     expect(messages[0]?.content).toContain("Never reference physical appearance");
     expect(messages[1]?.content).toContain("Founding Engineer");
+    expect(messages[1]?.content).toContain("<job_function>");
+    expect(messages[1]?.content).toContain("<optional_details>");
+    expect(messages[1]?.content).toContain("untrusted subject data");
     expect(messages[1]?.content).toContain("Hard maximum: 40 words");
     expect(messages[1]?.content).toContain("structured object");
     expect(messages[1]?.content).not.toContain("220 to 360 characters");
+  });
+
+  it("passes prior cards as explicit wording to avoid", () => {
+    const messages = buildInitialMessages(
+      persona!,
+      { jobFunction: "Teacher" },
+      { liked: [], disliked: [] },
+      ["Teacher, you are a lighthouse for algebra storms, helping 92% of equations find shore."],
+    );
+    expect(messages[1]?.content).toContain("<avoid_compliments>");
+    expect(messages[1]?.content).toContain("Do not repeat the opening, metaphor, statistic, punchline");
   });
 
   it("uses feedback as a soft, non-copying taste signal", () => {

@@ -2,14 +2,21 @@
 
 import { HeartHandshake, X } from "lucide-react";
 import { Tooltip } from "@/components/tooltip";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 export function ComplimentGuideDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const dialogRef = useDialogFocus<HTMLElement>(open, onClose);
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center p-4" role="dialog" aria-label="Compliment guide" aria-modal="true">
       <button aria-label="Close compliment guide" className="absolute inset-0 bg-[#141118]/35 backdrop-blur-[2px]" type="button" onClick={onClose} />
-      <section className="relative w-full max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--bg)] p-5 shadow-2xl shadow-black/20 sm:p-6">
+      <section
+        aria-labelledby="compliment-guide-title"
+        className="relative w-full max-w-xl rounded-[24px] border border-[var(--line)] bg-[var(--bg)] p-5 shadow-2xl shadow-black/20 sm:p-6"
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">
             <div className="grid size-11 shrink-0 place-items-center rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] text-[var(--coral)]">
@@ -17,7 +24,7 @@ export function ComplimentGuideDialog({ open, onClose }: { open: boolean; onClos
             </div>
             <div>
               <p className="v2-mono text-[0.68rem] uppercase text-[var(--purple-soft)]">A small guide</p>
-              <h2 className="v2-display mt-1 text-2xl font-semibold text-[var(--text)]">Give praise that lands</h2>
+              <h2 className="v2-display mt-1 text-2xl font-semibold text-[var(--text)]" id="compliment-guide-title">Give praise that lands</h2>
             </div>
           </div>
           <Tooltip align="end" label="Close guide">

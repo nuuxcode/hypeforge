@@ -1,25 +1,10 @@
 import { providerErrorMessage } from "@/lib/ai";
+import { rateLimitCookie, rateLimitHeaders, readRateLimit } from "@/lib/api-rate-limit";
 import { generateCompliantCompliment, isGuidelineComplianceError } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { getPersona } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
-import { checkAndIncrement } from "@/lib/rateLimit";
-import { RetryBodySchema, sanitizeInput } from "@/lib/validate";
-
-const COOKIE_NAME = "hypeforge_rl";
-
-function getCookie(req: Request, name: string): string | undefined {
-  const header = req.headers.get("cookie") ?? "";
-  for (const pair of header.split(";")) {
-    const [key, value] = pair.trim().split("=");
-    if (key === name) return decodeURIComponent(value);
-  }
-  return undefined;
-}
-
-function cookieHeader(value: string): string {
-  return `${COOKIE_NAME}=${encodeURIComponent(value)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`;
-}
+import { resolveSubject, RetryBodySchema } from "@/lib/validate";
 
 export async function POST(req: Request) {
   const debug = createApiDebug("POST /api/retry");
@@ -45,13 +30,13 @@ export async function POST(req: Request) {
 
   let rl;
   try {
-    rl = checkAndIncrement(getCookie(req, COOKIE_NAME));
+    rl = readRateLimit(req);
   } catch (error) {
     debug.error("rate-limit configuration failed", error);
     return Response.json(withDebug({ error: "Server configuration is missing." }, debug.finish()), { status: 500 });
   }
 
-  const setCookie = cookieHeader(rl.newCookie);
+  const setCookie = rateLimitCookie(rl.newCookie);
   if (!rl.ok) {
     debug.warn("request blocked by rate limit", { resetAt: rl.resetAt });
     return Response.json(
@@ -73,9 +58,13 @@ export async function POST(req: Request) {
     );
   }
 
-  let originalInput: string;
+  let subject: { jobFunction: string; personDetails?: string; displayInput: string };
   try {
-    originalInput = sanitizeInput(body.data.originalInput);
+    subject = resolveSubject({
+      jobFunction: body.data.jobFunction,
+      personDetails: body.data.personDetails,
+      legacyInput: body.data.originalInput,
+    });
   } catch (error) {
     debug.error("original input sanitization failed", error);
     return Response.json(
@@ -90,8 +79,8 @@ export async function POST(req: Request) {
       personaName: persona.name,
     });
     const result = await generateCompliantCompliment({
-      messages: buildInitialMessages(persona, originalInput),
-      subject: originalInput,
+        messages: buildInitialMessages(persona, subject),
+        subject: subject.jobFunction,
       personaId: persona.id,
       operation: "retry",
       debug,
@@ -117,11 +106,7 @@ export async function POST(req: Request) {
         debug.finish(),
       ),
       {
-        headers: {
-          "Set-Cookie": setCookie,
-          "X-RateLimit-Remaining": String(rl.remaining),
-          "X-RateLimit-Reset": String(rl.resetAt),
-        },
+        headers: rateLimitHeaders(rl),
       },
     );
   } catch (error) {

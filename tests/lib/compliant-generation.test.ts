@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createApiDebug } from "@/lib/debug";
 import { COMPLIANT_MODEL_OUTPUT } from "@/tests/fixtures/guidelines";
-import { generateGuidelineCandidate } from "@/lib/ai";
+import { evaluateGuidelineSemantics, generateGuidelineCandidate } from "@/lib/ai";
 import { generateCompliantCompliment, GuidelineComplianceError } from "@/lib/compliant-generation";
 
 vi.mock("@/lib/ai", () => ({
   generateGuidelineCandidate: vi.fn(),
+  evaluateGuidelineSemantics: vi.fn(async () => ({
+    noAppearanceReference: true,
+    metaphorIsWildlyAbsurd: true,
+    noRealPublicFigureComparison: true,
+    workplaceAppropriate: true,
+    meaningfullyMoreDramatic: true,
+    notes: ["All semantic rules passed."],
+  })),
   isQuotaError: (error: unknown) => error instanceof Error && /quota|429|RESOURCE_EXHAUSTED/i.test(error.message),
 }));
 
@@ -27,6 +35,7 @@ describe("generateCompliantCompliment", () => {
 
     expect(result.guidelines.checks.every((check) => check.state === "pass")).toBe(true);
     expect(generateGuidelineCandidate).toHaveBeenCalledTimes(1);
+    expect(evaluateGuidelineSemantics).toHaveBeenCalledTimes(1);
   });
 
   it("repairs one invalid candidate and verifies the replacement", async () => {
@@ -76,5 +85,48 @@ describe("generateCompliantCompliment", () => {
     vi.mocked(generateGuidelineCandidate).mockRejectedValue(new Error("429 quota exhausted"));
     await expect(generateCompliantCompliment(baseArgs())).rejects.toThrow("quota exhausted");
     expect(generateGuidelineCandidate).toHaveBeenCalledTimes(1);
+  });
+
+  it("repairs a semantic failure and rejects a flat escalation", async () => {
+    vi.mocked(generateGuidelineCandidate).mockResolvedValue(COMPLIANT_MODEL_OUTPUT);
+    vi.mocked(evaluateGuidelineSemantics)
+      .mockResolvedValueOnce({
+        noAppearanceReference: true,
+        metaphorIsWildlyAbsurd: false,
+        noRealPublicFigureComparison: true,
+        workplaceAppropriate: true,
+        meaningfullyMoreDramatic: true,
+        notes: ["The comparison is ordinary."],
+      })
+      .mockResolvedValueOnce({
+        noAppearanceReference: true,
+        metaphorIsWildlyAbsurd: true,
+        noRealPublicFigureComparison: true,
+        workplaceAppropriate: true,
+        meaningfullyMoreDramatic: true,
+        notes: ["The repair is absurd."],
+      });
+
+    await expect(generateCompliantCompliment(baseArgs())).resolves.toMatchObject({ guidelines: { version: "2.1" } });
+    expect(generateGuidelineCandidate).toHaveBeenCalledTimes(2);
+
+    vi.clearAllMocks();
+    vi.mocked(generateGuidelineCandidate).mockResolvedValue(COMPLIANT_MODEL_OUTPUT);
+    vi.mocked(evaluateGuidelineSemantics).mockResolvedValue({
+      noAppearanceReference: true,
+      metaphorIsWildlyAbsurd: true,
+      noRealPublicFigureComparison: true,
+      workplaceAppropriate: true,
+      meaningfullyMoreDramatic: false,
+      notes: ["This is only a paraphrase."],
+    });
+    await expect(
+      generateCompliantCompliment({
+        ...baseArgs(),
+        operation: "escalate",
+        previousText: "The earlier compliment.",
+      }),
+    ).rejects.toBeInstanceOf(GuidelineComplianceError);
+    expect(generateGuidelineCandidate).toHaveBeenCalledTimes(3);
   });
 });
