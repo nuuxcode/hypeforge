@@ -154,6 +154,86 @@ textarea {
   transform: translateX(-150%) skewX(-12deg);
 }
 
+.v2-card[data-drama-level="2"] {
+  border-color: color-mix(in srgb, var(--bucket-accent) 24%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 1.5%, var(--paper));
+}
+
+.v2-card[data-drama-level="3"] {
+  border-color: color-mix(in srgb, var(--bucket-accent) 36%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 2.5%, var(--paper));
+  box-shadow: var(--card-shadow), 0 10px 28px color-mix(in srgb, var(--bucket-accent) 8%, transparent), inset 0 3px 0 var(--bucket-accent);
+}
+
+.v2-card[data-drama-level="4"] {
+  border-color: color-mix(in srgb, var(--bucket-accent) 48%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 4%, var(--paper));
+  box-shadow: var(--card-shadow), 0 14px 34px color-mix(in srgb, var(--bucket-accent) 12%, transparent), inset 0 4px 0 var(--bucket-accent);
+}
+
+.v2-card[data-drama-level="5"] {
+  border-color: color-mix(in srgb, var(--bucket-accent) 64%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 5.5%, var(--paper));
+  box-shadow: var(--card-shadow), 0 0 0 1px color-mix(in srgb, var(--bucket-accent) 14%, transparent), 0 18px 42px color-mix(in srgb, var(--bucket-accent) 16%, transparent), inset 0 5px 0 var(--bucket-accent);
+}
+
+.v2-card[data-drama-level="6"] {
+  border-color: color-mix(in srgb, var(--bucket-accent) 78%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 7%, var(--paper));
+  box-shadow: var(--card-shadow), 0 0 0 2px color-mix(in srgb, var(--bucket-accent) 18%, transparent), 0 22px 52px color-mix(in srgb, var(--bucket-accent) 22%, transparent), inset 0 6px 0 var(--bucket-accent);
+}
+
+.v2-drama-badge {
+  border: 1px solid color-mix(in srgb, var(--bucket-accent) 12%, transparent);
+  transition: background 220ms ease, color 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.v2-card[data-drama-level="4"] .v2-drama-badge,
+.v2-card[data-drama-level="5"] .v2-drama-badge {
+  border-color: color-mix(in srgb, var(--bucket-accent) 28%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 11%, var(--paper-secondary));
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--bucket-accent) 10%, transparent);
+}
+
+.v2-card[data-drama-level="6"] .v2-drama-badge {
+  border-color: transparent;
+  background: var(--bucket-accent);
+  color: white;
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--bucket-accent) 24%, transparent);
+}
+
+.v2-card[data-drama-level="6"] .v2-drama-badge > span {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.v2-drama-meter {
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bucket-accent) 4%, transparent);
+  transition: background 220ms ease;
+}
+
+.v2-drama-meter-step {
+  height: 5px;
+  min-width: 0;
+  border-radius: 999px;
+  background: var(--muted-fill-strong);
+  transition: background 240ms ease, box-shadow 240ms ease, opacity 240ms ease, transform 240ms ease;
+}
+
+.v2-drama-meter-step[data-state="complete"] {
+  background: color-mix(in srgb, var(--bucket-accent) 56%, var(--muted-fill-strong));
+}
+
+.v2-drama-meter-step[data-state="current"] {
+  background: var(--bucket-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bucket-accent) 14%, transparent), 0 3px 10px color-mix(in srgb, var(--bucket-accent) 30%, transparent);
+}
+
+.v2-drama-meter-step[data-charging="true"] {
+  background: color-mix(in srgb, var(--bucket-accent) 60%, var(--muted-fill-strong));
+  animation: v2-meter-charge 760ms ease-in-out infinite alternate;
+}
+
 .v2-composer {
   width: 100%;
   border: 1px solid var(--line);
@@ -289,6 +369,33 @@ textarea {
   animation: v2-power-up 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+.v2-card[data-power-up="true"] .v2-drama-meter-step[data-state="current"] {
+  animation: v2-meter-unlock 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.v2-card[data-celebrating="true"] {
+  animation: v2-max-unlock 1.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.v2-drama-max:disabled {
+  cursor: default;
+  border-color: color-mix(in srgb, var(--bucket-accent) 38%, var(--line));
+  background: color-mix(in srgb, var(--bucket-accent) 11%, var(--control-bg));
+  color: var(--bucket-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bucket-accent) 8%, transparent);
+  opacity: 1;
+}
+
+.v2-drama-unlocked:disabled {
+  cursor: default;
+  border-color: transparent;
+  background: var(--bucket-accent);
+  color: #fff;
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--bucket-accent) 30%, transparent);
+  opacity: 1;
+  animation: v2-button-unlock 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 .v2-card-copy[data-revealing="true"] {
   animation: v2-copy-reveal 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
@@ -340,14 +447,67 @@ textarea {
 @keyframes v2-power-up {
   0% {
     box-shadow: var(--card-shadow), inset 0 2px 0 var(--bucket-accent);
-    transform: scale(0.992);
+    transform: scale(0.985) translateY(2px);
   }
   44% {
-    box-shadow: var(--card-shadow), 0 0 0 5px color-mix(in srgb, var(--bucket-accent) 16%, transparent), 0 16px 46px color-mix(in srgb, var(--bucket-accent) 20%, transparent), inset 0 2px 0 var(--bucket-accent);
-    transform: scale(1.008);
+    box-shadow: var(--card-shadow), 0 0 0 6px color-mix(in srgb, var(--bucket-accent) 18%, transparent), 0 20px 52px color-mix(in srgb, var(--bucket-accent) 24%, transparent), inset 0 4px 0 var(--bucket-accent);
+    transform: scale(1.014) translateY(-3px);
   }
   100% {
     box-shadow: var(--card-shadow), inset 0 2px 0 var(--bucket-accent);
+    transform: scale(1);
+  }
+}
+
+@keyframes v2-meter-charge {
+  from {
+    opacity: 0.45;
+    transform: scaleX(0.72);
+  }
+  to {
+    opacity: 1;
+    box-shadow: 0 0 12px color-mix(in srgb, var(--bucket-accent) 44%, transparent);
+    transform: scaleX(1);
+  }
+}
+
+@keyframes v2-meter-unlock {
+  0% {
+    transform: scaleX(0.2);
+  }
+  55% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--bucket-accent) 20%, transparent), 0 0 18px color-mix(in srgb, var(--bucket-accent) 44%, transparent);
+    transform: scaleX(1.12);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes v2-button-unlock {
+  0% {
+    filter: brightness(1.35);
+    transform: scale(0.96);
+  }
+  55% {
+    filter: brightness(1.06);
+    transform: scale(1.025);
+  }
+  100% {
+    filter: brightness(1);
+    transform: scale(1);
+  }
+}
+
+@keyframes v2-max-unlock {
+  0% {
+    transform: scale(0.98);
+  }
+  38% {
+    box-shadow: var(--card-shadow), 0 0 0 8px color-mix(in srgb, var(--bucket-accent) 19%, transparent), 0 24px 64px color-mix(in srgb, var(--bucket-accent) 30%, transparent), inset 0 6px 0 var(--bucket-accent);
+    transform: scale(1.018);
+  }
+  100% {
     transform: scale(1);
   }
 }
@@ -368,8 +528,9 @@ textarea {
 /* One-shot celebration when a card reaches the drama cap. */
 .v2-confetti {
   position: absolute;
+  z-index: 6;
   inset: 0;
-  overflow: visible;
+  overflow: hidden;
   pointer-events: none;
 }
 
@@ -408,7 +569,7 @@ textarea {
   }
   100% {
     opacity: 0;
-    transform: rotate(calc(var(--angle) + 140deg)) translateY(-64px) scale(1);
+    transform: rotate(calc(var(--angle) + 140deg)) translateY(-180px) scale(1);
   }
 }
 
@@ -421,6 +582,10 @@ textarea {
   .v2-card[data-loading="true"]::before,
   .v2-card[data-power-up="true"],
   .v2-card-copy[data-revealing="true"],
+  .v2-drama-unlocked,
+  .v2-drama-meter-step[data-charging="true"],
+  .v2-card[data-power-up="true"] .v2-drama-meter-step[data-state="current"],
+  .v2-card[data-celebrating="true"],
   .v2-forge-card,
   .v2-forge-card::before,
   .v2-confetti i,

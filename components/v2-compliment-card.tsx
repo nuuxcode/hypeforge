@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ChevronUp,
   Copy,
+  Crown,
   Download,
   History,
   LoaderCircle,
@@ -32,7 +33,7 @@ import {
 import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
 import { activeVersionIdFor, versionsForCard } from "@/lib/card-versions";
-import { dramaButtonLabel, isAtDramaCap } from "@/lib/drama";
+import { DRAMA_CAP, DRAMA_STAGES, dramaButtonLabel, dramaStage, isAtDramaCap } from "@/lib/drama";
 import { playForgeSound } from "@/lib/forge-sound";
 import { PERSONAS } from "@/lib/personas";
 import type { CardPendingAction, ComplimentCard, ComplimentCardVersion, FeedbackVote, PersonaBucket } from "@/lib/types";
@@ -55,10 +56,8 @@ function bucketFor(card: ComplimentCard): PersonaBucket {
 
 function styleForCard(card: ComplimentCard, index = 0): CSSProperties {
   const bucket = bucketFor(card);
-  const heat = Math.min(Math.max((card.dramaLevel - 1) / 3, 0), 1);
   return {
     "--bucket-accent": BUCKET_ACCENT[bucket],
-    "--heat": heat,
     animationDelay: `${index * 80}ms`,
   } as CSSProperties;
 }
@@ -114,8 +113,12 @@ export function V2ComplimentCard({
   const laterVersion = versions[activeVersionIndex + 1];
   const [expandedVersionIds, setExpandedVersionIds] = useState<Record<string, boolean>>({});
   const atDramaCap = isAtDramaCap(card.dramaLevel);
+  const currentStage = dramaStage(card.dramaLevel);
+  const nextStage = dramaStage(card.dramaLevel + 1);
   const [powerUpComplete, setPowerUpComplete] = useState(false);
+  const [levelUpNotice, setLevelUpNotice] = useState(false);
   const wasLoading = useRef(isLoading);
+  const lastPendingAction = useRef<CardPendingAction | undefined>(pendingAction);
   const shareStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const shareData: ComplimentShareData = {
@@ -164,15 +167,25 @@ export function V2ComplimentCard({
   };
 
   useEffect(() => {
+    if (pendingAction) lastPendingAction.current = pendingAction;
+  }, [pendingAction]);
+
+  useEffect(() => {
     if (wasLoading.current && !isLoading && card.status === "idle" && hasText) {
+      const completedAction = lastPendingAction.current;
       setPowerUpComplete(true);
-      playForgeSound("complete");
-      const timer = window.setTimeout(() => setPowerUpComplete(false), 900);
+      setLevelUpNotice(completedAction === "escalate");
+      playForgeSound(completedAction === "escalate" ? "level-up" : "complete", card.dramaLevel);
+      const timer = window.setTimeout(() => {
+        setPowerUpComplete(false);
+        setLevelUpNotice(false);
+      }, 2_000);
+      lastPendingAction.current = undefined;
       wasLoading.current = isLoading;
       return () => window.clearTimeout(timer);
     }
     wasLoading.current = isLoading;
-  }, [card.status, hasText, isLoading]);
+  }, [card.dramaLevel, card.status, hasText, isLoading]);
 
   useEffect(() => () => {
     if (shareStatusTimer.current) clearTimeout(shareStatusTimer.current);
@@ -202,8 +215,18 @@ export function V2ComplimentCard({
       data-loading={isLoading ? "true" : "false"}
       data-action={pendingAction}
       data-power-up={powerUpComplete ? "true" : "false"}
+      data-drama-level={currentStage.level}
+      data-max-drama={atDramaCap ? "true" : "false"}
+      data-celebrating={celebrating ? "true" : "false"}
       style={styleForCard(card, index)}
     >
+      {celebrating ? (
+        <span aria-hidden="true" className="v2-confetti">
+          {Array.from({ length: 22 }, (_, particle) => (
+            <i key={particle} style={{ "--particle": particle } as CSSProperties} />
+          ))}
+        </span>
+      ) : null}
       <header className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="text-xs font-semibold capitalize" style={{ color: BUCKET_ACCENT[bucket] }}>
@@ -213,7 +236,7 @@ export function V2ComplimentCard({
         </div>
         <div
           aria-label={`${badgeLabel(card.dramaLevel)}, version ${activeVersionIndex + 1} of ${versions.length}`}
-          className="v2-mono inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-full bg-[var(--paper-secondary)] text-[0.68rem] font-semibold text-[var(--ink)]"
+          className="v2-drama-badge v2-mono inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-full bg-[var(--paper-secondary)] text-[0.68rem] font-semibold text-[var(--ink)]"
           role="group"
         >
           <Tooltip align="end" label="View earlier version">
@@ -252,6 +275,27 @@ export function V2ComplimentCard({
         </div>
       </header>
 
+      <div
+        aria-label={`Drama level ${currentStage.level} of ${DRAMA_CAP}: ${currentStage.label}. ${currentStage.cue}.`}
+        aria-valuemax={DRAMA_CAP}
+        aria-valuemin={1}
+        aria-valuenow={currentStage.level}
+        className="v2-drama-meter mt-4"
+        role="progressbar"
+      >
+        <div className="flex items-center justify-between gap-3 text-[0.68rem] font-semibold">
+          <p className="min-w-0 truncate text-[var(--ink)]"><span className="v2-mono uppercase text-[var(--ink-muted)]">Drama</span> · {currentStage.label} <span className="text-[var(--ink-muted)]">{currentStage.cue}</span></p>
+          <span className="v2-mono shrink-0 text-[var(--ink-muted)]">{currentStage.level} / {DRAMA_CAP}</span>
+        </div>
+        <div aria-hidden="true" className="mt-2 grid grid-cols-6 gap-1.5">
+          {DRAMA_STAGES.map((stage) => {
+            const state = stage.level < currentStage.level ? "complete" : stage.level === currentStage.level ? "current" : "upcoming";
+            const charging = pendingAction === "escalate" && stage.level === Math.min(currentStage.level + 1, DRAMA_CAP);
+            return <span className="v2-drama-meter-step" data-charging={charging ? "true" : "false"} data-state={state} key={stage.level} />;
+          })}
+        </div>
+      </div>
+
       <div className="mt-6 flex flex-1 flex-col space-y-5">
         <div className="space-y-4">
           {hasText ? (
@@ -280,31 +324,36 @@ export function V2ComplimentCard({
           {hasText ? (
             <button
               aria-label={
-                atDramaCap
+                levelUpNotice
+                  ? `${card.personaName} unlocked drama ${String(currentStage.level).padStart(2, "0")}, ${currentStage.label}`
+                  : atDramaCap
                   ? `${card.personaName} compliment reached maximum drama`
                   : `Make ${card.personaName} compliment more dramatic`
               }
-              className="v2-secondary-button v2-drama-button relative inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={isLoading || atDramaCap}
+              className={`v2-secondary-button v2-drama-button relative inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed ${levelUpNotice ? "v2-drama-unlocked" : atDramaCap ? "v2-drama-max" : "disabled:opacity-50"}`}
+              disabled={isLoading || levelUpNotice || atDramaCap}
               type="button"
               onClick={() => {
                 playForgeSound("charge");
                 onEscalate(card.id);
               }}
             >
-              {celebrating ? (
-                <span aria-hidden="true" className="v2-confetti">
-                  {Array.from({ length: 14 }, (_, particle) => (
-                    <i key={particle} style={{ "--particle": particle } as CSSProperties} />
-                  ))}
-                </span>
-              ) : null}
               {pendingAction === "escalate" ? (
                 <LoaderCircle aria-hidden="true" className="size-4 animate-spin" />
+              ) : levelUpNotice ? (
+                atDramaCap ? <Crown aria-hidden="true" className="size-4" /> : <Check aria-hidden="true" className="size-4" />
+              ) : atDramaCap ? (
+                <Crown aria-hidden="true" className="size-4" />
               ) : (
                 <WandSparkles aria-hidden="true" className="size-4" />
               )}
-              {pendingAction === "escalate" ? "Increasing drama…" : dramaButtonLabel(card.dramaLevel)}
+              {pendingAction === "escalate"
+                ? `Charging ${nextStage.label}…`
+                : levelUpNotice
+                  ? atDramaCap
+                    ? "Maximum drama unlocked"
+                    : `Drama ${String(currentStage.level).padStart(2, "0")} · ${currentStage.label} unlocked`
+                  : dramaButtonLabel(card.dramaLevel)}
             </button>
           ) : (
             <button

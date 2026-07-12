@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 const STORAGE_KEY = "hypeforge.sound-effects";
 const CHANGE_EVENT = "hypeforge:sound-effects";
 
-type ForgeSound = "charge" | "complete" | "deck-complete";
+type ForgeSound = "charge" | "complete" | "deck-complete" | "level-up";
 
 let audioContext: AudioContext | null = null;
 
@@ -64,7 +64,7 @@ function tone(context: AudioContext, frequency: number, startsIn: number, durati
 
 // Tiny synthesized cues keep the interaction tactile without adding an asset,
 // network request, or autoplay behavior. The first cue always follows a click.
-export function playForgeSound(sound: ForgeSound): void {
+export function playForgeSound(sound: ForgeSound, level = 1): void {
   const context = contextForGesture();
   if (!context) return;
 
@@ -77,6 +77,16 @@ export function playForgeSound(sound: ForgeSound): void {
   if (sound === "complete") {
     tone(context, 392, 0, 0.12, 0.028);
     tone(context, 523.25, 0.08, 0.16, 0.025);
+    return;
+  }
+
+  if (sound === "level-up") {
+    const boundedLevel = Math.min(Math.max(level, 1), 6);
+    const root = 293.66 * (1 + boundedLevel * 0.045);
+    tone(context, root, 0, 0.11, 0.024);
+    tone(context, root * 1.25, 0.07, 0.14, 0.025);
+    tone(context, root * 1.5, 0.15, boundedLevel === 6 ? 0.28 : 0.2, 0.024);
+    if (boundedLevel === 6) tone(context, root * 2, 0.24, 0.3, 0.02);
     return;
   }
 
