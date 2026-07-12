@@ -221,13 +221,17 @@ export function V2ComplimentCard({
                         {version.kind} · Drama {String(version.dramaLevel).padStart(2, "0")}
                       </p>
                       {isCurrentVersion ? (
-                        <span className="text-xs font-bold text-[var(--purple)]">Current</span>
+                        <span className="inline-flex min-h-8 items-center gap-1.5 rounded-[10px] bg-[var(--accent-soft)] px-2.5 text-xs font-semibold text-[var(--accent)]">
+                          <Check aria-hidden="true" className="size-3.5" />
+                          Current
+                        </span>
                       ) : (
                         <button
-                          className="text-xs font-bold text-[var(--purple)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#8b5cf6]/35"
+                          className="inline-flex min-h-8 items-center gap-1.5 rounded-[10px] border border-[var(--line-strong)] bg-[var(--control-bg)] px-2.5 text-xs font-semibold text-[var(--text)] shadow-sm transition hover:-translate-y-0.5 hover:border-[var(--accent)] hover:bg-[var(--accent-soft)] hover:text-[var(--accent)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
                           type="button"
                           onClick={() => onRestoreVersion(card.id, version)}
                         >
+                          <RotateCcw aria-hidden="true" className="size-3.5" />
                           Restore
                         </button>
                       )}
