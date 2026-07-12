@@ -39,6 +39,14 @@ yarn-error.log*
 
 # internal-only local folders
 docs/
+plans/
+
+# internal process docs, kept local only (Mounssif 2026-07-12: "this shouldnt be in github it ours internal stuff")
+HANDOFF-*.md
+SUBMISSION-EMAIL-DRAFT.md
+SUBMISSION-VIDEO-SCRIPT.md
+COMPANY-COMPLIMENT-GUIDELINES-PLAN.md
+MOBILE-CHECKLIST.md
 
 # local dev logs (not for public)
 logs/
