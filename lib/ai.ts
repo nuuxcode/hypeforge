@@ -3,20 +3,12 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, Output, type ModelMessage } from "ai";
 import { z } from "zod";
 import { GuidelineModelOutputSchema, type GuidelineModelOutput } from "./compliment-guidelines";
-
-let googleClient: ReturnType<typeof createGoogleGenerativeAI> | null = null;
-
-function getGoogleClient() {
-  if (googleClient) return googleClient;
-  // HYPEFORGE_GEMINI_API_KEY wins so a GEMINI_API_KEY exported in the shell
-  // (e.g. ~/.zshrc) cannot shadow the key configured in .env.local.
-  const apiKey = process.env.HYPEFORGE_GEMINI_API_KEY || process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error("HYPEFORGE_GEMINI_API_KEY / GEMINI_API_KEY is not set.");
-  }
-  googleClient = createGoogleGenerativeAI({ apiKey });
-  return googleClient;
-}
+import {
+  classifyGeminiFailure,
+  runWithGeminiKey,
+  type GeminiKeyPoolEvent,
+  type GeminiKeyPoolEventHandler,
+} from "./gemini-key-pool";
 
 function getModelIds() {
   const main = process.env.GEMINI_MODEL_MAIN ?? process.env.GEMINI_MODEL_BACKUP ?? "gemini-3.1-flash-lite";
@@ -57,13 +49,16 @@ function errorMessage(error: unknown): string {
 }
 
 export function isQuotaError(error: unknown): boolean {
-  return /quota|RESOURCE_EXHAUSTED|429|rate.?limit/i.test(errorMessage(error));
+  return classifyGeminiFailure(error) === "quota";
 }
 
 export function providerErrorMessage(error: unknown): string {
   const message = errorMessage(error);
   if (/GEMINI_API_KEY|not set|missing/i.test(message)) {
     return "Server configuration is missing.";
+  }
+  if (classifyGeminiFailure(error) === "credentials") {
+    return "Gemini rejected the configured API keys. Check the server key configuration.";
   }
   if (isQuotaError(error)) {
     return "Gemini has reached its current quota. Wait a moment, then try again.";
@@ -72,6 +67,23 @@ export function providerErrorMessage(error: unknown): string {
     return "Gemini took too long to answer. Try again in a moment.";
   }
   return "The compliment engine got overwhelmed by your brilliance. Try again.";
+}
+
+function reportKeyPoolEvent(event: GeminiKeyPoolEvent, listener?: GeminiKeyPoolEventHandler) {
+  listener?.(event);
+  if (event.type === "failure") {
+    console.warn(
+      `[gemini-key-pool] ${event.reason} on key ${event.keySlot}/${event.keyCount} (${event.keyName}); consecutive failures: ${event.consecutiveFailures}/3${event.rotatesNow ? "; rotating" : ""}`,
+    );
+    return;
+  }
+  if (event.type === "rotation") {
+    console.warn(
+      `[gemini-key-pool] switched from key ${event.keySlot}/${event.keyCount} (${event.keyName}) to key ${event.nextKeySlot}/${event.keyCount} (${event.nextKeyName})`,
+    );
+    return;
+  }
+  console.info(`[gemini-key-pool] request recovered on key ${event.keySlot}/${event.keyCount} (${event.keyName})`);
 }
 
 function combinedModelError(args: {
@@ -95,38 +107,41 @@ function combinedModelError(args: {
 
 export async function generateGuidelineCandidate(
   messages: ModelMessage[],
-  options: { temperature?: number; maxOutputTokens?: number } = {},
+  options: { temperature?: number; maxOutputTokens?: number; onKeyEvent?: GeminiKeyPoolEventHandler } = {},
 ): Promise<GuidelineModelOutput> {
-  const google = getGoogleClient();
   const { main, backup } = getModelIds();
   const prompt = splitSystemMessages(messages);
 
-  const tryModel = async (modelId: string) => {
-    const result = await generateText({
-      model: google(modelId),
-      system: prompt.system,
-      messages: prompt.messages,
-      temperature: options.temperature ?? 1,
-      maxOutputTokens: options.maxOutputTokens ?? 260,
-      maxRetries: 0,
-      abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
-      providerOptions: {
-        google: {
-          thinkingConfig: { thinkingBudget: 0 },
+  const tryModel = (modelId: string) => runWithGeminiKey(
+    async (apiKey) => {
+      const google = createGoogleGenerativeAI({ apiKey });
+      const result = await generateText({
+        model: google(modelId),
+        system: prompt.system,
+        messages: prompt.messages,
+        temperature: options.temperature ?? 1,
+        maxOutputTokens: options.maxOutputTokens ?? 260,
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+        providerOptions: {
+          google: {
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         },
-      },
-      output: Output.object({
-        schema: GuidelineModelOutputSchema,
-        name: "company_compliment",
-        description: "A guideline-compliant workplace compliment with exact rule evidence.",
-      }),
-    });
-    if (result.finishReason === "length") {
-      throw new Error("Model output was truncated.");
-    }
-    if (!result.output) throw new Error("Model returned no structured compliment output.");
-    return result.output;
-  };
+        output: Output.object({
+          schema: GuidelineModelOutputSchema,
+          name: "company_compliment",
+          description: "A guideline-compliant workplace compliment with exact rule evidence.",
+        }),
+      });
+      if (result.finishReason === "length") {
+        throw new Error("Model output was truncated.");
+      }
+      if (!result.output) throw new Error("Model returned no structured compliment output.");
+      return result.output;
+    },
+    (event) => reportKeyPoolEvent(event, options.onKeyEvent),
+  );
 
   try {
     return await tryModel(main);
@@ -151,8 +166,8 @@ export async function evaluateGuidelineSemantics(args: {
   text: string;
   jobFunction: string;
   previousText?: string;
+  onKeyEvent?: GeminiKeyPoolEventHandler;
 }): Promise<SemanticEvaluation> {
-  const google = getGoogleClient();
   const { main, backup } = getModelIds();
   const validator = process.env.GEMINI_MODEL_VALIDATOR ?? main;
   const prompt = `Audit one workplace compliment against Company Guidelines v2.1.
@@ -167,24 +182,28 @@ Set meaningfullyMoreDramatic to true when no previous version is supplied becaus
 
 Check for direct or indirect physical appearance references; whether the supplied metaphor is genuinely wildly absurd and connected to the work; direct or indirect comparison to any real public figure; and workplace appropriateness including no sexual, profane, discriminatory, humiliating, threatening, or graphic content.`;
 
-  const tryModel = async (modelId: string) => {
-    const result = await generateText({
-      model: google(modelId),
-      prompt,
-      temperature: 0,
-      maxOutputTokens: 220,
-      maxRetries: 0,
-      abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
-      providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
-      output: Output.object({
-        schema: SemanticEvaluationSchema,
-        name: "compliment_guideline_audit",
-        description: "An independent semantic audit of one workplace compliment.",
-      }),
-    });
-    if (!result.output) throw new Error("Validator returned no structured evaluation.");
-    return result.output;
-  };
+  const tryModel = (modelId: string) => runWithGeminiKey(
+    async (apiKey) => {
+      const google = createGoogleGenerativeAI({ apiKey });
+      const result = await generateText({
+        model: google(modelId),
+        prompt,
+        temperature: 0,
+        maxOutputTokens: 220,
+        maxRetries: 0,
+        abortSignal: AbortSignal.timeout(MODEL_TIMEOUT_MS),
+        providerOptions: { google: { thinkingConfig: { thinkingBudget: 0 } } },
+        output: Output.object({
+          schema: SemanticEvaluationSchema,
+          name: "compliment_guideline_audit",
+          description: "An independent semantic audit of one workplace compliment.",
+        }),
+      });
+      if (!result.output) throw new Error("Validator returned no structured evaluation.");
+      return result.output;
+    },
+    (event) => reportKeyPoolEvent(event, args.onKeyEvent),
+  );
 
   try {
     return await tryModel(validator);

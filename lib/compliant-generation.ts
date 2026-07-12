@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import { evaluateGuidelineSemantics, generateGuidelineCandidate, isQuotaError } from "./ai";
+import type { GeminiKeyPoolEvent } from "./gemini-key-pool";
 import {
   failedGuidelineChecks,
   hasFunctionContext,
@@ -96,6 +97,34 @@ export async function generateCompliantCompliment(args: {
 
   let repair: ModelMessage | undefined;
   let latestCompliance: GuidelineCompliance | undefined;
+  const onKeyEvent = (event: GeminiKeyPoolEvent) => {
+    if (event.type === "failure") {
+      args.debug.providerInfo("Gemini key failure recorded", {
+        keySlot: event.keySlot,
+        keyCount: event.keyCount,
+        keyName: event.keyName,
+        reason: event.reason,
+        consecutiveFailures: event.consecutiveFailures,
+        rotatesNow: event.rotatesNow,
+      });
+      return;
+    }
+    if (event.type === "rotation") {
+      args.debug.providerInfo("Gemini API key rotated automatically", {
+        fromKeySlot: event.keySlot,
+        toKeySlot: event.nextKeySlot,
+        keyCount: event.keyCount,
+        reason: event.reason,
+        consecutiveFailures: event.consecutiveFailures,
+      });
+      return;
+    }
+    args.debug.providerInfo("Gemini request recovered after key rotation", {
+      keySlot: event.keySlot,
+      keyCount: event.keyCount,
+      attemptedKeys: event.attemptedKeys,
+    });
+  };
   const maxAttempts = args.operation === "escalate" ? 3 : 2;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     args.debug.providerInfo("guideline generation attempt started", {
@@ -110,6 +139,7 @@ export async function generateCompliantCompliment(args: {
         {
           temperature: attempt === 1 ? args.temperature : Math.min(args.temperature ?? 1, 0.75),
           maxOutputTokens: args.maxOutputTokens,
+          onKeyEvent,
         },
       );
       const preliminary = verifyGuidelineOutput(candidate, args.subject);
@@ -118,6 +148,7 @@ export async function generateCompliantCompliment(args: {
             text: preliminary.text,
             jobFunction: args.subject,
             previousText: args.operation === "escalate" ? args.previousText : undefined,
+            onKeyEvent,
           })
         : undefined;
       const verified = semantic ? verifyGuidelineOutput(candidate, args.subject, semantic) : preliminary;
