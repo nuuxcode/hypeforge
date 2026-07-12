@@ -1,0 +1,10 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Known non-secret test and local-storage fixtures"
+regexTarget = "match"
+regexes = [
+  '''process\.env\.RATELIMIT_SECRET\s*=\s*"(?:0123456789abcdef){4}"''',
+  '''(?:DECK_HISTORY_KEY|TASTE_SIGNAL_KEY)\s*=\s*"hypeforge_v2_(?:deck_history|taste_signals)"''',
+]
