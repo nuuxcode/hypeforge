@@ -133,7 +133,7 @@ export function cardErrorMessage(body: unknown, operation: CardOperation = "retr
   if (isApiErrorResponse(body) && (/quota/i.test(body.error) || /too long/i.test(body.error))) return body.error;
   if (isApiErrorResponse(body) && /did not clear every Brand Team rule/i.test(body.error)) {
     if (operation === "escalate") {
-      return "The new version missed a company rule, so we kept this valid compliment. Try increasing the drama again.";
+      return "All 3 automatic attempts missed a company rule, so we kept this valid compliment. You can try increasing the drama again.";
     }
     if (operation === "tweak") {
       return "The rewrite missed a company rule, so we kept this valid compliment. Adjust your note or try again.";

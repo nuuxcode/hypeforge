@@ -19,7 +19,7 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { Tooltip } from "@/components/tooltip";
 import { V2InputPanel } from "@/components/v2-input-panel";
 import { V2ComplimentCard } from "@/components/v2-compliment-card";
-import { fetchWithTimeout } from "@/lib/client-fetch";
+import { fetchEscalationWithProgress, fetchWithTimeout } from "@/lib/client-fetch";
 import { isAtDramaCap } from "@/lib/drama";
 import { playForgeSound } from "@/lib/forge-sound";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -48,6 +48,7 @@ import type {
   ComplimentCardVersion,
   CardPendingAction,
   DeliveryMode,
+  EscalationProgress,
   FeedbackVote,
   PersonaBucket,
 } from "@/lib/types";
@@ -135,6 +136,7 @@ export default function V2Page() {
   const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [pendingCardActions, setPendingCardActions] = useState<Record<string, CardPendingAction | undefined>>({});
+  const [escalationProgress, setEscalationProgress] = useState<Record<string, EscalationProgress | undefined>>({});
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const speechRequest = useRef(0);
   const wasGenerating = useRef(false);
@@ -433,6 +435,15 @@ export default function V2Page() {
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
       setPendingCardActions((current) => ({ ...current, [cardId]: "escalate" }));
+      setEscalationProgress((current) => ({
+        ...current,
+        [cardId]: {
+          attempt: 1,
+          maxAttempts: 3,
+          phase: "generating",
+          message: "Generating a stronger version…",
+        },
+      }));
 
       const payload = {
         personaId: card.personaId,
@@ -446,12 +457,17 @@ export default function V2Page() {
       };
       const startedAt = performance.now();
       try {
-        const response = await fetchWithTimeout("/api/escalate", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(payload),
-        });
-        const body = (await response.json().catch(() => ({}))) as unknown;
+        const { response, body } = await fetchEscalationWithProgress(
+          "/api/escalate",
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          (progress) => {
+            setEscalationProgress((current) => ({ ...current, [cardId]: progress }));
+          },
+        );
         logApiExchange({
           endpoint: "POST /api/escalate",
           payload,
@@ -494,6 +510,7 @@ export default function V2Page() {
         setCardError(cardId, cardErrorMessage(undefined, "escalate"));
       } finally {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
+        setEscalationProgress((current) => ({ ...current, [cardId]: undefined }));
       }
     },
     [cards, persistDeck, setCardError],
@@ -1007,6 +1024,7 @@ export default function V2Page() {
                   speaking={speakingCardId === card.id}
                   tweakValue={tweakDrafts[card.id] ?? ""}
                   pendingAction={pendingCardActions[card.id]}
+                  escalationProgress={escalationProgress[card.id]}
                   onToggleTweak={(cardId) => {
                     setVersionPanels({});
                     setShareCardId(null);

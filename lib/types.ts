@@ -1,5 +1,18 @@
 export type CardStatus = "idle" | "loading" | "error";
 export type CardPendingAction = "escalate" | "retry" | "tweak";
+export type EscalationProgressPhase = "generating" | "checking" | "repairing";
+
+export type EscalationProgress = {
+  attempt: number;
+  maxAttempts: number;
+  phase: EscalationProgressPhase;
+  message: string;
+  failedRuleIds?: string[];
+};
+
+export type EscalationStreamEvent =
+  | ({ type: "progress" } & EscalationProgress)
+  | { type: "result"; body: unknown };
 export type DeliveryMode = "direct" | "public";
 
 export type PersonaBucket = "grand" | "mythic" | "chaotic";

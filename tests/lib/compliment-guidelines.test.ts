@@ -39,6 +39,34 @@ describe("Company Compliment Guidelines v2.1", () => {
     expect(commaPercent.guidelines.checks.find((check) => check.id === "made-up-statistic")?.state).toBe("pass");
   });
 
+  it("accepts absurd magnitude and cosmic-count statistics from real model output", () => {
+    const magnitude = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        text: COMPLIANT_MODEL_OUTPUT.text.replace("99.7% of impossible requests", "999 quintillion impossible requests"),
+        evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, madeUpStatistic: "999 quintillion" },
+      },
+      "Customer Success Manager",
+    );
+    const cosmicCount = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        text: COMPLIANT_MODEL_OUTPUT.text.replace("99.7% of impossible requests", "842 planetary alignments"),
+        evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, madeUpStatistic: "842" },
+      },
+      "Customer Success Manager",
+    );
+
+    expect(magnitude.guidelines.checks.find((check) => check.id === "made-up-statistic")).toMatchObject({
+      state: "pass",
+      evidence: "999 quintillion",
+    });
+    expect(cosmicCount.guidelines.checks.find((check) => check.id === "made-up-statistic")).toMatchObject({
+      state: "pass",
+      evidence: "842 planetary alignments",
+    });
+  });
+
   it("extracts exact statistic evidence from valid compliment text when model evidence drifts", () => {
     const verified = verifyGuidelineOutput(
       {

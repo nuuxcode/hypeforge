@@ -1,6 +1,10 @@
 import { providerErrorMessage } from "@/lib/ai";
 import { rateLimitCookie, rateLimitHeaders, readRateLimit } from "@/lib/api-rate-limit";
-import { generateCompliantCompliment, isGuidelineComplianceError } from "@/lib/compliant-generation";
+import {
+  generateCompliantCompliment,
+  isGuidelineComplianceError,
+  type ComplianceProgress,
+} from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
 import { getPersona } from "@/lib/personas";
 import { buildEscalationMessages } from "@/lib/prompts";
@@ -99,41 +103,42 @@ export async function POST(req: Request) {
     historyCount: history.length,
   });
 
-  try {
-    debug.providerInfo("escalation generation started", {
-      personaId: persona.id,
-      personaName: persona.name,
-      dramaLevel: body.data.dramaLevel,
-    });
-    const result = await generateCompliantCompliment({
-      messages: buildEscalationMessages({
-        persona,
-        originalInput: subject.displayInput,
-        jobFunction: subject.jobFunction,
-        personDetails: subject.personDetails,
-        deliveryMode: body.data.deliveryMode,
-        currentText,
-        history,
+  const runEscalation = async (onProgress?: (progress: ComplianceProgress) => void) => {
+    try {
+      debug.providerInfo("escalation generation started", {
+        personaId: persona.id,
+        personaName: persona.name,
         dramaLevel: body.data.dramaLevel,
-      }),
-      subject: subject.jobFunction,
-      personaId: persona.id,
-      operation: "escalate",
-      deliveryMode: body.data.deliveryMode,
-      previousText: currentText,
-      debug,
-      temperature: 1.05,
-      maxOutputTokens: 260,
-    });
-    debug.providerInfo("escalation generation succeeded", {
-      personaId: persona.id,
-      personaName: persona.name,
-      characterCount: result.text.length,
-      wordCount: result.guidelines.wordCount,
-    });
+      });
+      const result = await generateCompliantCompliment({
+        messages: buildEscalationMessages({
+          persona,
+          originalInput: subject.displayInput,
+          jobFunction: subject.jobFunction,
+          personDetails: subject.personDetails,
+          deliveryMode: body.data.deliveryMode,
+          currentText,
+          history,
+          dramaLevel: body.data.dramaLevel,
+        }),
+        subject: subject.jobFunction,
+        personaId: persona.id,
+        operation: "escalate",
+        deliveryMode: body.data.deliveryMode,
+        previousText: currentText,
+        debug,
+        temperature: 1.05,
+        maxOutputTokens: 260,
+        onProgress,
+      });
+      debug.providerInfo("escalation generation succeeded", {
+        personaId: persona.id,
+        personaName: persona.name,
+        characterCount: result.text.length,
+        wordCount: result.guidelines.wordCount,
+      });
 
-    return Response.json(
-      withDebug(
+      return withDebug(
         {
           ok: true,
           text: result.text,
@@ -142,19 +147,35 @@ export async function POST(req: Request) {
           guidelines: result.guidelines,
         },
         debug.finish(),
-      ),
-      {
-        headers: rateLimitHeaders(rl),
-      },
-    );
-  } catch (error) {
-    debug.providerError("escalation generation failed", error);
-    return Response.json(
-      withDebug(
-        { ok: false, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error) },
+      );
+    } catch (error) {
+      debug.providerError("escalation generation failed", error);
+      return withDebug(
+        { ok: false as const, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error) },
         debug.finish(),
-      ),
-      { headers: { "Set-Cookie": setCookie } },
-    );
+      );
+    }
+  };
+
+  if (!req.headers.get("accept")?.includes("application/x-ndjson")) {
+    return Response.json(await runEscalation(), { headers: rateLimitHeaders(rl) });
   }
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (event: unknown) => controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+      const result = await runEscalation((progress) => send({ type: "progress", ...progress }));
+      send({ type: "result", body: result });
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      ...rateLimitHeaders(rl),
+      "Content-Type": "application/x-ndjson; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

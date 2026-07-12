@@ -162,4 +162,46 @@ describe("generateCompliantCompliment", () => {
     ).rejects.toBeInstanceOf(GuidelineComplianceError);
     expect(generateGuidelineCandidate).toHaveBeenCalledTimes(3);
   });
+
+  it("reports the real three-attempt escalation progress sequence", async () => {
+    vi.mocked(evaluateGuidelineSemantics).mockResolvedValue({
+      noAppearanceReference: true,
+      metaphorIsWildlyAbsurd: true,
+      noRealPublicFigureComparison: true,
+      workplaceAppropriate: true,
+      meaningfullyMoreDramatic: true,
+      notes: ["The repaired version is clearly more dramatic."],
+    });
+    const invalid = {
+      ...COMPLIANT_MODEL_OUTPUT,
+      text: COMPLIANT_MODEL_OUTPUT.text.replace("cosmic", "literally cosmic"),
+      evidence: {
+        ...COMPLIANT_MODEL_OUTPUT.evidence,
+        absurdMetaphor: "a literally cosmic air-traffic controller for client chaos",
+      },
+    };
+    vi.mocked(generateGuidelineCandidate)
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValueOnce(COMPLIANT_MODEL_OUTPUT);
+    const progress: Array<{ attempt: number; phase: string }> = [];
+
+    await expect(generateCompliantCompliment({
+      ...baseArgs(),
+      operation: "escalate",
+      previousText: "The earlier compliment.",
+      onProgress: (event) => progress.push({ attempt: event.attempt, phase: event.phase }),
+    })).resolves.toMatchObject({ guidelines: { version: "2.1" } });
+
+    expect(progress).toEqual([
+      { attempt: 1, phase: "generating" },
+      { attempt: 1, phase: "checking" },
+      { attempt: 1, phase: "repairing" },
+      { attempt: 2, phase: "generating" },
+      { attempt: 2, phase: "checking" },
+      { attempt: 2, phase: "repairing" },
+      { attempt: 3, phase: "generating" },
+      { attempt: 3, phase: "checking" },
+    ]);
+  });
 });

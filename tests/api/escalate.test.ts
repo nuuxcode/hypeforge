@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/escalate/route";
 import { generateCompliantCompliment } from "@/lib/compliant-generation";
+import { COMPLIANT_RESULT } from "@/tests/fixtures/guidelines";
 
 vi.mock("@/lib/compliant-generation", async () => {
   const { COMPLIANT_RESULT } = await import("@/tests/fixtures/guidelines");
@@ -113,5 +114,34 @@ describe("POST /api/escalate", () => {
     const secondCall = vi.mocked(generateCompliantCompliment).mock.calls[1]?.[0];
     expect(JSON.stringify(secondCall?.messages)).toContain("calmed a difficult client call");
     expect(JSON.stringify(secondCall?.messages)).toContain(currentText);
+  });
+
+  it("streams real attempt progress before the final result", async () => {
+    vi.mocked(generateCompliantCompliment).mockImplementationOnce(async (args) => {
+      args.onProgress?.({ attempt: 1, maxAttempts: 3, phase: "generating", message: "Generating…" });
+      args.onProgress?.({ attempt: 1, maxAttempts: 3, phase: "checking", message: "Checking…" });
+      args.onProgress?.({ attempt: 1, maxAttempts: 3, phase: "repairing", message: "Repairing…", failedRuleIds: ["made-up-statistic"] });
+      args.onProgress?.({ attempt: 2, maxAttempts: 3, phase: "generating", message: "Generating repair…" });
+      return COMPLIANT_RESULT;
+    });
+    const response = await POST(
+      new Request("http://localhost/api/escalate", {
+        method: "POST",
+        headers: { accept: "application/x-ndjson" },
+        body: JSON.stringify({
+          personaId: "epic-bard",
+          originalInput: "Customer Success Manager",
+          currentText,
+          history: [currentText],
+          dramaLevel: 1,
+          deliveryMode: "direct",
+        }),
+      }),
+    );
+    const events = (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+
+    expect(response.headers.get("content-type")).toContain("application/x-ndjson");
+    expect(events.filter((event) => event.type === "progress")).toHaveLength(4);
+    expect(events.at(-1)).toMatchObject({ type: "result", body: { ok: true, dramaLevel: 2 } });
   });
 });

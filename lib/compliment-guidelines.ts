@@ -155,7 +155,7 @@ const PUBLIC_FIGURE_COMPARISON_PATTERN =
 const UNSAFE_WORKPLACE_PATTERN =
   /\b(?:fuck|shit|bitch|bastard|sexy|naked|nude|kill|murder|slaughter|racial slur|idiot|moron|worthless)\b/i;
 const STATISTIC_PATTERN =
-  /(?:\b(?:top\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+)/i;
+  /(?:\b(?:top\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:thousand|million|billion|trillion|quadrillion|quintillion|sextillion)\b|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:galax(?:y|ies)|stars?|planets?|planetary\s+alignments?|nebulae?|universes?|dimensions?|timelines?|realities|asteroids?|comets?|moons?|suns?|black\s+holes?|impossible\s+requests?)\b)/i;
 
 function normalize(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();

@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import { evaluateGuidelineSemantics, generateGuidelineCandidate, isQuotaError } from "./ai";
+import { captureAiFailure } from "./ai-failure-log";
 import type { GeminiKeyPoolEvent } from "./gemini-key-pool";
 import {
   failedGuidelineChecks,
@@ -10,6 +11,13 @@ import type { createApiDebug } from "./debug";
 import type { DeliveryMode, GuidelineCompliance } from "./types";
 
 type DebugLogger = ReturnType<typeof createApiDebug>;
+export type ComplianceProgress = {
+  attempt: number;
+  maxAttempts: number;
+  phase: "generating" | "checking" | "repairing";
+  message: string;
+  failedRuleIds?: string[];
+};
 const SECOND_PERSON_PATTERN = /\b(?:you|your|yours|yourself|you're|you've|you'll|you\u2019re|you\u2019ve|you\u2019ll)\b/i;
 
 function deliveryModeFailure(text: string, mode: DeliveryMode): string | undefined {
@@ -90,6 +98,7 @@ export async function generateCompliantCompliment(args: {
   maxOutputTokens?: number;
   previousText?: string;
   deliveryMode?: DeliveryMode;
+  onProgress?: (progress: ComplianceProgress) => void;
 }): Promise<{ text: string; guidelines: GuidelineCompliance }> {
   if (!hasFunctionContext(args.subject) && args.subject.trim().split(/\s+/).length < 2) {
     throw new GuidelineComplianceError("Add the person's job title or what they do so every compliment can name their function.");
@@ -127,6 +136,12 @@ export async function generateCompliantCompliment(args: {
   };
   const maxAttempts = args.operation === "escalate" ? 3 : 2;
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    args.onProgress?.({
+      attempt,
+      maxAttempts,
+      phase: "generating",
+      message: attempt === 1 ? "Generating a stronger version…" : "Generating the repaired version…",
+    });
     args.debug.providerInfo("guideline generation attempt started", {
       operation: args.operation,
       personaId: args.personaId,
@@ -142,6 +157,12 @@ export async function generateCompliantCompliment(args: {
           onKeyEvent,
         },
       );
+      args.onProgress?.({
+        attempt,
+        maxAttempts,
+        phase: "checking",
+        message: "Checking all 8 company rules…",
+      });
       const preliminary = verifyGuidelineOutput(candidate, args.subject);
       const semantic = failedGuidelineChecks(preliminary.guidelines).length === 0
         ? await evaluateGuidelineSemantics({
@@ -178,7 +199,52 @@ export async function generateCompliantCompliment(args: {
       });
 
       if (verified.passed && !dramaticFailure && !modeFailure) {
+        if (attempt > 1) {
+          await captureAiFailure({
+            requestId: args.debug.debug.requestId,
+            operation: args.operation,
+            personaId: args.personaId,
+            deliveryMode: args.deliveryMode,
+            subject: args.subject,
+            attempt,
+            maxAttempts,
+            outcome: "recovered",
+            candidate,
+            compliance: verified.guidelines,
+            semanticNotes: semantic?.notes,
+          });
+        }
         return { text: verified.text, guidelines: verified.guidelines };
+      }
+      const rejectedRuleIds = [
+        ...failures.map((item) => item.id),
+        ...(dramaticFailure ? ["dramatic-escalation"] : []),
+        ...(modeFailure ? ["delivery-mode"] : []),
+      ];
+      await captureAiFailure({
+        requestId: args.debug.debug.requestId,
+        operation: args.operation,
+        personaId: args.personaId,
+        deliveryMode: args.deliveryMode,
+        subject: args.subject,
+        attempt,
+        maxAttempts,
+        outcome: "rejected-candidate",
+        candidate,
+        compliance: verified.guidelines,
+        failedRuleIds: rejectedRuleIds,
+        semanticNotes: semantic?.notes,
+        dramaticFailure,
+        modeFailure,
+      });
+      if (attempt < maxAttempts) {
+        args.onProgress?.({
+          attempt,
+          maxAttempts,
+          phase: "repairing",
+          message: `Attempt ${attempt} missed ${rejectedRuleIds.length === 1 ? "1 rule" : `${rejectedRuleIds.length} rules`}. Repairing automatically…`,
+          failedRuleIds: rejectedRuleIds,
+        });
       }
       repair = repairInstruction({
         subject: args.subject,
@@ -194,6 +260,25 @@ export async function generateCompliantCompliment(args: {
         error,
       });
       if (isQuotaError(error) || isGuidelineComplianceError(error)) throw error;
+      await captureAiFailure({
+        requestId: args.debug.debug.requestId,
+        operation: args.operation,
+        personaId: args.personaId,
+        deliveryMode: args.deliveryMode,
+        subject: args.subject,
+        attempt,
+        maxAttempts,
+        outcome: "provider-error",
+        error,
+      });
+      if (attempt < maxAttempts) {
+        args.onProgress?.({
+          attempt,
+          maxAttempts,
+          phase: "repairing",
+          message: `Gemini stumbled on attempt ${attempt}. Retrying automatically…`,
+        });
+      }
       repair = repairInstruction({ subject: args.subject, schemaFailure: error instanceof Error ? error.message : String(error) });
     }
   }

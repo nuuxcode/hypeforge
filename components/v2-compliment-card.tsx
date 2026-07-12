@@ -36,7 +36,14 @@ import { activeVersionIdFor, versionsForCard } from "@/lib/card-versions";
 import { DRAMA_CAP, DRAMA_STAGES, dramaButtonLabel, dramaStage, isAtDramaCap } from "@/lib/drama";
 import { playForgeSound } from "@/lib/forge-sound";
 import { PERSONAS } from "@/lib/personas";
-import type { CardPendingAction, ComplimentCard, ComplimentCardVersion, FeedbackVote, PersonaBucket } from "@/lib/types";
+import type {
+  CardPendingAction,
+  ComplimentCard,
+  ComplimentCardVersion,
+  EscalationProgress,
+  FeedbackVote,
+  PersonaBucket,
+} from "@/lib/types";
 
 const BUCKET_ACCENT: Record<PersonaBucket, string> = {
   grand: "#7050c8",
@@ -78,6 +85,7 @@ export function V2ComplimentCard({
   speaking,
   tweakValue,
   pendingAction,
+  escalationProgress,
   onToggleTweak,
   onToggleShare,
   onToggleSpeech,
@@ -98,6 +106,7 @@ export function V2ComplimentCard({
   speaking: boolean;
   tweakValue: string;
   pendingAction?: CardPendingAction;
+  escalationProgress?: EscalationProgress;
   onToggleTweak: (cardId: string) => void;
   onToggleShare: (cardId: string) => void;
   onToggleSpeech: (cardId: string, text: string) => void;
@@ -318,6 +327,39 @@ export function V2ComplimentCard({
               {card.error}
             </div>
           ) : null}
+
+          {pendingAction === "escalate" && escalationProgress ? (
+            <div
+              aria-live="polite"
+              className="rounded-[14px] border px-3 py-2.5"
+              role="status"
+              style={{
+                borderColor: `color-mix(in srgb, ${BUCKET_ACCENT[bucket]} 38%, var(--line))`,
+                background: `color-mix(in srgb, ${BUCKET_ACCENT[bucket]} 8%, var(--paper-secondary))`,
+              }}
+            >
+              <div className="flex items-center justify-between gap-3 text-xs font-bold">
+                <span style={{ color: BUCKET_ACCENT[bucket] }}>Automatic rule repair</span>
+                <span className="v2-mono text-[var(--ink-muted)]">
+                  Attempt {escalationProgress.attempt}/{escalationProgress.maxAttempts}
+                </span>
+              </div>
+              <p className="mt-1 text-sm font-semibold leading-5 text-[var(--ink)]">{escalationProgress.message}</p>
+              <div aria-hidden="true" className="mt-2 grid grid-cols-3 gap-1.5">
+                {Array.from({ length: escalationProgress.maxAttempts }, (_, attemptIndex) => (
+                  <span
+                    className="h-1 rounded-full"
+                    key={attemptIndex}
+                    style={{
+                      background: attemptIndex < escalationProgress.attempt
+                        ? BUCKET_ACCENT[bucket]
+                        : "var(--muted-fill-strong)",
+                    }}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-auto grid gap-2 sm:grid-cols-2 lg:grid-cols-1 min-[1500px]:grid-cols-2">
@@ -348,7 +390,13 @@ export function V2ComplimentCard({
                 <WandSparkles aria-hidden="true" className="size-4" />
               )}
               {pendingAction === "escalate"
-                ? `Charging ${nextStage.label}…`
+                ? escalationProgress
+                  ? escalationProgress.phase === "checking"
+                    ? `Checking rules · ${escalationProgress.attempt}/${escalationProgress.maxAttempts}`
+                    : escalationProgress.phase === "repairing"
+                      ? `Repairing · ${escalationProgress.attempt}/${escalationProgress.maxAttempts}`
+                      : `Increasing drama · ${escalationProgress.attempt}/${escalationProgress.maxAttempts}`
+                  : `Charging ${nextStage.label}…`
                 : levelUpNotice
                   ? atDramaCap
                     ? "Maximum drama unlocked"
