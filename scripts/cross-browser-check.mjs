@@ -19,7 +19,7 @@ for (const target of targets) {
       page.on("console", (message) => {
         if (message.type() === "error") consoleErrors.push(message.text());
       });
-      await page.goto(`${baseUrl}/v2`, { waitUntil: "networkidle" });
+      await page.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
       await page.getByLabel("Their job or role").fill("Product Manager");
       const generateEnabled = await page.getByRole("button", { name: "Generate 3 compliments" }).isEnabled();
       await page.getByRole("button", { name: "Open compliment guide" }).click();

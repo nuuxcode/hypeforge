@@ -24,7 +24,7 @@ async function audit(name, page, include) {
 try {
   const desktopContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const desktop = await desktopContext.newPage();
-  await desktop.goto(`${baseUrl}/v2`, { waitUntil: "networkidle" });
+  await desktop.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
   await audit("generator desktop", desktop, "main");
   await desktop.getByRole("button", { name: "Switch to dark mode" }).click();
   await desktop.waitForTimeout(250);
@@ -35,7 +35,7 @@ try {
 
   const mobileContext = await browser.newContext({ viewport: { width: 320, height: 800 } });
   const mobile = await mobileContext.newPage();
-  await mobile.goto(`${baseUrl}/v2`, { waitUntil: "networkidle" });
+  await mobile.goto(`${baseUrl}/`, { waitUntil: "networkidle" });
   await audit("generator mobile", mobile, "main");
 
   const guideContext = await browser.newContext({ viewport: { width: 1024, height: 900 } });

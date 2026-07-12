@@ -4,7 +4,7 @@ Turns a job title or person description into three wildly enthusiastic, slightly
 
 ## Live Demo
 
-[Open HypeForge](https://hypeforge-liard.vercel.app/v2)
+[Open HypeForge](https://hypeforge-liard.vercel.app)
 
 ![HypeForge showing three independently verified compliment cards](./public/hypeforge-screenshot.png)
 
@@ -16,7 +16,7 @@ Turns a job title or person description into three wildly enthusiastic, slightly
 - "Make it more dramatic" escalates only the selected card, using its own prior versions
 - Copy to clipboard with per-card confirmation and fallback copy support
 - Intentional loading, friendly errors, and mobile-first layout
-- `/v2` premium workspace with saved decks, per-card version history, tweak notes, and light taste signals
+- Premium workspace with saved decks, per-card version history, tweak notes, and light taste signals
 - Clean share links at `/deck/<short-id>` with a public, readable deck page
 - Crawlable compliment guide, metadata, Open Graph image, JSON-LD, `robots.txt`, and sitemap
 - Company Compliment Guidelines v2.1 enforced across generation, retry, tweak, and escalation
@@ -55,7 +55,7 @@ pnpm install
 pnpm dev
 ```
 
-Open http://localhost:3000. To match the audited local workspace, run `pnpm dev -- --port 3001` and open http://localhost:3001/v2.
+Open http://localhost:3000. The old `/v2` path still works and redirects to the homepage, so previously shared links keep resolving.
 
 ## Checks
 

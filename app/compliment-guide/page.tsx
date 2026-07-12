@@ -26,8 +26,8 @@ export default function ComplimentGuidePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(guideSchema) }} />
       <div className="mx-auto max-w-4xl">
         <header className="flex items-center justify-between gap-4 border-b border-[var(--line)] pb-6">
-          <Link className="v2-display text-xl font-semibold v2-gradient-text" href="/v2">HypeForge</Link>
-          <Link className="inline-flex min-h-10 items-center gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 text-sm font-bold text-[var(--text)] transition hover:bg-[var(--control-hover)]" href="/v2">
+          <Link className="v2-display text-xl font-semibold v2-gradient-text" href="/">HypeForge</Link>
+          <Link className="inline-flex min-h-10 items-center gap-2 rounded-[14px] border border-[var(--line)] bg-[var(--control-bg)] px-3 text-sm font-bold text-[var(--text)] transition hover:bg-[var(--control-hover)]" href="/">
             Open generator
             <ArrowRight aria-hidden="true" className="size-4" />
           </Link>

@@ -36,11 +36,11 @@ export default async function SharedDeckPage({ params }: { params: Promise<{ slu
     <main className="v2-shell min-h-dvh px-4 py-6 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--line)] pb-5">
-          <Link className="inline-flex items-center gap-2 v2-display text-xl font-semibold v2-gradient-text" href="/v2">
+          <Link className="inline-flex items-center gap-2 v2-display text-xl font-semibold v2-gradient-text" href="/">
             <Sparkles aria-hidden="true" className="size-5 text-[var(--coral)]" />
             HypeForge
           </Link>
-          <Link className="inline-flex min-h-11 items-center gap-2 rounded-[14px] bg-[var(--ink)] px-4 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5" href={`/v2?share=${deck.slug}`}>
+          <Link className="inline-flex min-h-11 items-center gap-2 rounded-[14px] bg-[var(--ink)] px-4 text-sm font-bold text-[var(--paper)] transition hover:-translate-y-0.5" href={`/?share=${deck.slug}`}>
             Save this deck to my workspace
             <ArrowRight aria-hidden="true" className="size-4" />
           </Link>
