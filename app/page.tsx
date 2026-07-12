@@ -130,10 +130,13 @@ export default function V2Page() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [versionPanels, setVersionPanels] = useState<CardVersionPanel>({});
   const [tweakCardId, setTweakCardId] = useState<string | null>(null);
+  const [shareCardId, setShareCardId] = useState<string | null>(null);
+  const [speakingCardId, setSpeakingCardId] = useState<string | null>(null);
   const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [pendingCardActions, setPendingCardActions] = useState<Record<string, CardPendingAction | undefined>>({});
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const speechRequest = useRef(0);
   const wasGenerating = useRef(false);
 
   const trimmedInput = input.trim();
@@ -152,6 +155,53 @@ export default function V2Page() {
     }
     const timers = copyTimers.current;
     return () => Object.values(timers).forEach((timer) => clearTimeout(timer));
+  }, []);
+
+  const stopSpeech = useCallback(() => {
+    speechRequest.current += 1;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+    setSpeakingCardId(null);
+  }, []);
+
+  const toggleSpeech = useCallback((cardId: string, text: string) => {
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      setShareMessage("Read aloud is not supported in this browser.");
+      return;
+    }
+
+    const wasSpeaking = speakingCardId === cardId;
+    speechRequest.current += 1;
+    const request = speechRequest.current;
+    window.speechSynthesis.cancel();
+    if (wasSpeaking) {
+      setSpeakingCardId(null);
+      return;
+    }
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.92;
+    utterance.pitch = 1.04;
+    const preferredVoice = window.speechSynthesis
+      .getVoices()
+      .find((voice) => voice.lang.toLowerCase().startsWith("en") && voice.localService);
+    if (preferredVoice) utterance.voice = preferredVoice;
+    utterance.onend = () => {
+      if (speechRequest.current === request) setSpeakingCardId(null);
+    };
+    utterance.onerror = (event) => {
+      if (speechRequest.current !== request || event.error === "canceled" || event.error === "interrupted") return;
+      console.error("[HypeForge read aloud] Speech synthesis failed", event.error);
+      setSpeakingCardId(null);
+      setShareMessage("This device could not read the compliment aloud.");
+    };
+    setSpeakingCardId(cardId);
+    window.speechSynthesis.speak(utterance);
+  }, [speakingCardId]);
+
+  useEffect(() => () => {
+    speechRequest.current += 1;
+    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   }, []);
 
   useEffect(() => {
@@ -929,23 +979,45 @@ export default function V2Page() {
                   index={index}
                   key={card.id}
                   onCopy={copyText}
-                  onEscalate={escalate}
-                  onRetry={retryCard}
-                  onTweak={tweakCard}
+                  onEscalate={(cardId) => {
+                    stopSpeech();
+                    escalate(cardId);
+                  }}
+                  onRetry={(cardId) => {
+                    stopSpeech();
+                    retryCard(cardId);
+                  }}
+                  onTweak={(cardId) => {
+                    stopSpeech();
+                    tweakCard(cardId);
+                  }}
                   onSetFeedback={setCardFeedback}
-                  onRestoreVersion={restoreCardVersion}
+                  onRestoreVersion={(cardId, version) => {
+                    stopSpeech();
+                    restoreCardVersion(cardId, version);
+                  }}
                   versionsOpen={Boolean(versionPanels[card.id])}
                   onToggleVersions={(cardId) => {
                     setTweakCardId(null);
+                    setShareCardId(null);
                     setVersionPanels((current) => (current[cardId] ? {} : { [cardId]: true }));
                   }}
                   tweakOpen={tweakCardId === card.id}
+                  shareOpen={shareCardId === card.id}
+                  speaking={speakingCardId === card.id}
                   tweakValue={tweakDrafts[card.id] ?? ""}
                   pendingAction={pendingCardActions[card.id]}
                   onToggleTweak={(cardId) => {
                     setVersionPanels({});
+                    setShareCardId(null);
                     setTweakCardId((current) => (current === cardId ? null : cardId));
                   }}
+                  onToggleShare={(cardId) => {
+                    setVersionPanels({});
+                    setTweakCardId(null);
+                    setShareCardId((current) => (current === cardId ? null : cardId));
+                  }}
+                  onToggleSpeech={toggleSpeech}
                   onTweakValueChange={(cardId, value) =>
                     setTweakDrafts((current) => ({ ...current, [cardId]: value }))
                   }

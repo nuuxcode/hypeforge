@@ -2,20 +2,33 @@
 
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 import {
+  BriefcaseBusiness,
   Check,
   ChevronDown,
   ChevronUp,
   Copy,
+  Download,
   History,
   LoaderCircle,
+  MessageCircle,
   RotateCcw,
+  Share2,
   SlidersHorizontal,
   Sparkles,
+  Square,
   ThumbsDown,
   ThumbsUp,
+  Volume2,
   WandSparkles,
   X,
 } from "lucide-react";
+import {
+  copyComplimentForPlatform,
+  downloadComplimentPng,
+  shareComplimentNatively,
+  type ComplimentShareData,
+  type SharePlatform,
+} from "@/lib/card-sharing";
 import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
 import { activeVersionIdFor, versionsForCard } from "@/lib/card-versions";
@@ -62,9 +75,13 @@ export function V2ComplimentCard({
   versionsOpen,
   onToggleVersions,
   tweakOpen,
+  shareOpen,
+  speaking,
   tweakValue,
   pendingAction,
   onToggleTweak,
+  onToggleShare,
+  onToggleSpeech,
   onTweakValueChange,
 }: {
   card: ComplimentCard;
@@ -78,9 +95,13 @@ export function V2ComplimentCard({
   versionsOpen: boolean;
   onToggleVersions: (cardId: string) => void;
   tweakOpen: boolean;
+  shareOpen: boolean;
+  speaking: boolean;
   tweakValue: string;
   pendingAction?: CardPendingAction;
   onToggleTweak: (cardId: string) => void;
+  onToggleShare: (cardId: string) => void;
+  onToggleSpeech: (cardId: string, text: string) => void;
   onTweakValueChange: (cardId: string, value: string) => void;
 }) {
   const isLoading = card.status === "loading";
@@ -95,6 +116,52 @@ export function V2ComplimentCard({
   const atDramaCap = isAtDramaCap(card.dramaLevel);
   const [powerUpComplete, setPowerUpComplete] = useState(false);
   const wasLoading = useRef(isLoading);
+  const shareStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [shareStatus, setShareStatus] = useState<string | null>(null);
+  const shareData: ComplimentShareData = {
+    text: card.text,
+    jobFunction: card.jobFunction ?? card.originalInput,
+    personaName: card.personaName,
+    bucket,
+    dramaLevel: card.dramaLevel,
+    deliveryMode: card.deliveryMode,
+  };
+
+  const announceShareStatus = (message: string) => {
+    setShareStatus(message);
+    if (shareStatusTimer.current) clearTimeout(shareStatusTimer.current);
+    shareStatusTimer.current = setTimeout(() => setShareStatus(null), 2_400);
+  };
+
+  const copyForPlatform = async (platform: SharePlatform) => {
+    try {
+      announceShareStatus(await copyComplimentForPlatform(platform, shareData));
+    } catch (error) {
+      console.error(`[HypeForge card share] Copy for ${platform} failed`, error);
+      announceShareStatus("That format could not be copied.");
+    }
+  };
+
+  const nativeShare = async () => {
+    try {
+      const result = await shareComplimentNatively(shareData);
+      if (result === "shared") announceShareStatus("Share sheet opened.");
+      if (result === "copied") announceShareStatus("Native sharing is unavailable, so the compliment was copied.");
+    } catch (error) {
+      console.error("[HypeForge card share] Share failed", error);
+      announceShareStatus("This compliment could not be shared.");
+    }
+  };
+
+  const downloadPng = async () => {
+    try {
+      await downloadComplimentPng(shareData);
+      announceShareStatus("PNG card downloaded.");
+    } catch (error) {
+      console.error("[HypeForge card share] PNG download failed", error);
+      announceShareStatus("The PNG card could not be created.");
+    }
+  };
 
   useEffect(() => {
     if (wasLoading.current && !isLoading && card.status === "idle" && hasText) {
@@ -106,6 +173,10 @@ export function V2ComplimentCard({
     }
     wasLoading.current = isLoading;
   }, [card.status, hasText, isLoading]);
+
+  useEffect(() => () => {
+    if (shareStatusTimer.current) clearTimeout(shareStatusTimer.current);
+  }, []);
 
   // One confetti burst the moment a card reaches the drama cap, never on
   // remounts of an already-capped card (e.g. restored decks).
@@ -306,6 +377,18 @@ export function V2ComplimentCard({
               <History aria-hidden="true" className="size-4" />
             </button>
           </Tooltip>
+          <Tooltip label={speaking ? "Stop reading aloud" : "Read aloud"}>
+            <button
+              aria-label={speaking ? `Stop reading ${card.personaName} compliment` : `Read ${card.personaName} compliment aloud`}
+              aria-pressed={speaking}
+              className={`${toolClass} ${speaking ? "bg-[var(--accent-soft)] text-[var(--accent)]" : ""}`}
+              disabled={!hasText || isLoading}
+              type="button"
+              onClick={() => onToggleSpeech(card.id, card.text)}
+            >
+              {speaking ? <Square aria-hidden="true" className="size-3.5 fill-current" /> : <Volume2 aria-hidden="true" className="size-4" />}
+            </button>
+          </Tooltip>
           <Tooltip label="Tweak this card">
             <button
               aria-expanded={tweakOpen}
@@ -316,6 +399,18 @@ export function V2ComplimentCard({
               onClick={() => onToggleTweak(card.id)}
             >
               <SlidersHorizontal aria-hidden="true" className="size-4" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Share this card">
+            <button
+              aria-expanded={shareOpen}
+              aria-label={`Share ${card.personaName} compliment`}
+              className={`${toolClass} ${shareOpen ? "bg-[var(--accent-soft)] text-[var(--accent)]" : ""}`}
+              disabled={!hasText || isLoading}
+              type="button"
+              onClick={() => onToggleShare(card.id)}
+            >
+              <Share2 aria-hidden="true" className="size-4" />
             </button>
           </Tooltip>
           {card.feedback ? (
@@ -428,6 +523,49 @@ export function V2ComplimentCard({
                 {pendingAction === "tweak" ? "Applying your note…" : "Regenerate with note"}
               </button>
             </div>
+          </section>
+        ) : null}
+
+        {shareOpen && hasText ? (
+          <section className="rounded-[18px] border border-[var(--dark-line)] bg-[var(--paper-secondary)] p-3" aria-label={`Share ${card.personaName} compliment options`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="v2-mono text-[0.68rem] font-bold uppercase text-[var(--ink-muted)]">Share this card</p>
+                <p className="mt-1 text-xs font-medium leading-5 text-[var(--ink-muted)]">Send it, copy a platform-ready version, or save a square image.</p>
+              </div>
+              <button
+                aria-label={`Close ${card.personaName} share options`}
+                className="grid size-8 shrink-0 place-items-center rounded-[10px] text-[var(--ink-muted)] transition hover:bg-[var(--control-hover)] hover:text-[var(--ink)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+                type="button"
+                onClick={() => onToggleShare(card.id)}
+              >
+                <X aria-hidden="true" className="size-4" />
+              </button>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 min-[1500px]:grid-cols-2">
+              <button className="v2-secondary-button inline-flex min-h-10 items-center justify-center gap-2 px-3 text-xs font-semibold" type="button" onClick={nativeShare}>
+                <Share2 aria-hidden="true" className="size-4" />
+                Device share
+              </button>
+              <button className="v2-secondary-button inline-flex min-h-10 items-center justify-center gap-2 px-3 text-xs font-semibold" type="button" onClick={() => copyForPlatform("x")}>
+                <span aria-hidden="true" className="v2-mono text-sm font-bold">X</span>
+                Copy for X
+              </button>
+              <button className="v2-secondary-button inline-flex min-h-10 items-center justify-center gap-2 px-3 text-xs font-semibold" type="button" onClick={() => copyForPlatform("linkedin")}>
+                <BriefcaseBusiness aria-hidden="true" className="size-4" />
+                Copy for LinkedIn
+              </button>
+              <button className="v2-secondary-button inline-flex min-h-10 items-center justify-center gap-2 px-3 text-xs font-semibold" type="button" onClick={() => copyForPlatform("whatsapp")}>
+                <MessageCircle aria-hidden="true" className="size-4" />
+                Copy for WhatsApp
+              </button>
+              <button className="v2-secondary-button inline-flex min-h-10 items-center justify-center gap-2 px-3 text-xs font-semibold sm:col-span-2 lg:col-span-1 min-[1500px]:col-span-2" type="button" onClick={downloadPng}>
+                <Download aria-hidden="true" className="size-4" />
+                Download PNG card
+              </button>
+            </div>
+            <p className="mt-3 min-h-5 text-xs font-semibold text-[var(--accent)]" role="status">{shareStatus}</p>
           </section>
         ) : null}
       </div>

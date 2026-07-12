@@ -18,6 +18,8 @@ Turns a job title or person description into three wildly enthusiastic, slightly
 - Intentional loading, friendly errors, and mobile-first layout
 - Premium workspace with saved decks, per-card version history, tweak notes, and light taste signals
 - Clean share links at `/deck/<short-id>` with a public, readable deck page
+- Per-card native sharing, X/LinkedIn/WhatsApp copy formats, and downloadable 1200x1200 PNG cards
+- User-triggered read aloud with the device's built-in speech synthesizer and an immediate stop control
 - Crawlable compliment guide, metadata, Open Graph image, JSON-LD, `robots.txt`, and sitemap
 - Company Compliment Guidelines v2.1 enforced across generation, retry, tweak, and escalation
 - Per-version 8/8 rule proof with code, evidence, heuristic, and model check sources; the badge headline honestly splits code-verified from AI-audited checks, with a settings toggle for the wording
@@ -75,7 +77,7 @@ pnpm verify:api
 
 ## Sharing
 
-The share button creates a short URL such as `/deck/a1b2c3d4`, rather than placing the whole compliment deck in the address bar. The recipient can read it immediately or save a copy to their own HypeForge workspace.
+The header share button creates a short URL such as `/deck/a1b2c3d4`, rather than placing the whole compliment deck in the address bar. The recipient can read it immediately or save a copy to their own HypeForge workspace. Each card also has a share panel for the device share sheet, platform-formatted clipboard text, and a locally rendered square PNG; compliment text never needs to be sent to another image service.
 
 ## AI-Assisted Development
 
@@ -87,6 +89,7 @@ Codex and Claude Code were used for implementation support, test generation, UI 
 - Semantic validation is probabilistic even though deterministic checks fail closed around it.
 - The signed cookie rate limit is appropriate for a small exercise; a higher-traffic production service should use shared per-IP or account-based throttling.
 - Safari coverage uses Playwright WebKit; the final deployed URL should also be checked on a physical iPhone before submission.
+- Native share targets and text-to-speech voices depend on browser and operating-system support; unsupported actions fail back to copy or show a clear error.
 
 ## Future Improvement
 
