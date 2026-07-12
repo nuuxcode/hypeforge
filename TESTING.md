@@ -14,7 +14,7 @@ gitleaks git . --redact --no-banner
 ```
 
 - Unit/API tests cover guideline boundaries, semantic reconciliation, bounded repair, fail-closed behavior, prompt injection, role/function resolution, non-English roles, card history, multi-level escalation, deck distinctness, clipboard fallback, request timeout, sharing, and taste votes.
-- `test:a11y` runs axe WCAG A/AA checks against light and dark desktop states, the mobile generator, the guide dialog, and the public guide.
+- `test:a11y` runs axe WCAG A/AA checks against light and dark desktop states, the mobile generator, the guide dialog, the public guide, and both admin authentication and diagnostics when `HYPEFORGE_ADMIN_CODE` is configured.
 - `test:browsers` checks 375px and 1440px layouts in Chrome/Chromium, Firefox, and Safari/WebKit, including required input, dialog keyboard closing, console errors, and horizontal overflow.
 - `verify:api` makes a real local Gemini generation request and fails if HTTP or application-level success is false.
 - Gitleaks scans the complete Git history. `.gitleaks.toml` narrowly excludes only the documented fake rate-limit fixture and local-storage key constants.

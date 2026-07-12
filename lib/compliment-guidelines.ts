@@ -150,12 +150,15 @@ const STOP_WORDS = new Set([
 ]);
 const APPEARANCE_PATTERN =
   /\b(?:beautiful|handsome|pretty|gorgeous|attractive|appearance|looks?|eyes?|hair|skin|face|smile|teeth|lips|body|height|weight|tall|short|slim|curvy|clothes?|clothing|outfit|dress(?:ed)?|stylish|beard|makeup|voice)\b/i;
-const PUBLIC_FIGURE_COMPARISON_PATTERN =
-  /\b(?:like|as|than|version of|rival(?:s|ing)?|outshines?)\s+(?:the\s+)?[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+/;
+// Capitalized job titles such as "as Customer Success Manager" look exactly
+// like names to a regex. Explicit celebrity wording is blocked here while the
+// independent semantic audit handles actual names and indirect comparisons.
+const EXPLICIT_PUBLIC_FIGURE_PATTERN =
+  /\b(?:celebrity|real public figure|famous (?:actor|actress|artist|athlete|politician|president|singer)|hollywood star)\b/i;
 const UNSAFE_WORKPLACE_PATTERN =
   /\b(?:fuck|shit|bitch|bastard|sexy|naked|nude|kill|murder|slaughter|racial slur|idiot|moron|worthless)\b/i;
 const STATISTIC_PATTERN =
-  /(?:\b(?:top\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:thousand|million|billion|trillion|quadrillion|quintillion|sextillion)\b|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:galax(?:y|ies)|stars?|planets?|planetary\s+alignments?|nebulae?|universes?|dimensions?|timelines?|realities|asteroids?|comets?|moons?|suns?|black\s+holes?|impossible\s+requests?)\b)/i;
+  /(?:\b(?:top\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:thousand|million|billion|trillion|quadrillion|quintillion|sextillion)\b|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:galax(?:y|ies)|stars?|planets?|planetary\s+alignments?|nebulae?|universes?|dimensions?|timelines?|realities|asteroids?|comets?|moons?|suns?|black\s+holes?|impossible\s+requests?)\b|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+[a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2}\b)/i;
 
 function normalize(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -232,7 +235,7 @@ export function verifyGuidelineOutput(
   const statisticEvidencePresent = containsQuote(text, resolvedStatisticEvidence);
   const statisticLooksValid = STATISTIC_PATTERN.test(resolvedStatisticEvidence);
   const appearanceGuardClear = !APPEARANCE_PATTERN.test(text);
-  const publicFigureGuardClear = !PUBLIC_FIGURE_COMPARISON_PATTERN.test(text);
+  const publicFigureGuardClear = !EXPLICIT_PUBLIC_FIGURE_PATTERN.test(text);
   const workplaceGuardClear = !UNSAFE_WORKPLACE_PATTERN.test(text);
 
   const checks: RuleCheck[] = [

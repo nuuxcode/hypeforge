@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { captureAiFailure } from "@/lib/ai-failure-log";
+import { captureAiFailure, captureApiTrace, listObservabilityRecords } from "@/lib/ai-failure-log";
 import { COMPLIANT_MODEL_OUTPUT } from "@/tests/fixtures/guidelines";
 
 describe("AI failure logging", () => {
@@ -55,5 +55,38 @@ describe("AI failure logging", () => {
     expect(record.candidate.text).toBe(COMPLIANT_MODEL_OUTPUT.text);
     expect(record.failedRuleIds).toEqual(["made-up-statistic"]);
     expect(record.promptVersion).toBe("company-guidelines-v2.1-repair-v2");
+  });
+
+  it("lists accepted model attempts and complete API traces from the local store", async () => {
+    await captureAiFailure({
+      requestId: "request-complete",
+      operation: "generate",
+      personaId: "epic-bard",
+      deliveryMode: "direct",
+      subject: "Customer Success Manager",
+      attempt: 1,
+      maxAttempts: 2,
+      outcome: "accepted",
+      candidate: COMPLIANT_MODEL_OUTPUT,
+    });
+    await captureApiTrace({
+      requestId: "request-complete",
+      route: "POST /api/generate",
+      startedAt: "2026-07-12T20:00:00.000Z",
+      elapsedMs: 1200,
+      events: [{
+        timestamp: "2026-07-12T20:00:01.000Z",
+        level: "info",
+        scope: "provider",
+        message: "persona generation succeeded",
+        details: { personaId: "epic-bard" },
+      }],
+    });
+
+    const records = await listObservabilityRecords();
+    expect(records).toHaveLength(2);
+    expect(records.map((record) => record.kind).sort()).toEqual(["ai-attempt", "api-trace"]);
+    expect(records.find((record) => record.kind === "ai-attempt")).toMatchObject({ outcome: "accepted" });
+    expect(records.find((record) => record.kind === "api-trace")).toMatchObject({ severity: "success" });
   });
 });

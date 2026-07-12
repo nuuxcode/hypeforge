@@ -199,21 +199,19 @@ export async function generateCompliantCompliment(args: {
       });
 
       if (verified.passed && !dramaticFailure && !modeFailure) {
-        if (attempt > 1) {
-          await captureAiFailure({
-            requestId: args.debug.debug.requestId,
-            operation: args.operation,
-            personaId: args.personaId,
-            deliveryMode: args.deliveryMode,
-            subject: args.subject,
-            attempt,
-            maxAttempts,
-            outcome: "recovered",
-            candidate,
-            compliance: verified.guidelines,
-            semanticNotes: semantic?.notes,
-          });
-        }
+        await captureAiFailure({
+          requestId: args.debug.debug.requestId,
+          operation: args.operation,
+          personaId: args.personaId,
+          deliveryMode: args.deliveryMode,
+          subject: args.subject,
+          attempt,
+          maxAttempts,
+          outcome: attempt > 1 ? "recovered" : "accepted",
+          candidate,
+          compliance: verified.guidelines,
+          semanticNotes: semantic?.notes,
+        });
         return { text: verified.text, guidelines: verified.guidelines };
       }
       const rejectedRuleIds = [

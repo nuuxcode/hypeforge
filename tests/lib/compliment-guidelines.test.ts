@@ -67,6 +67,43 @@ describe("Company Compliment Guidelines v2.1", () => {
     });
   });
 
+  it("accepts fictional numeric counts and does not mistake a capitalized role for a public figure", () => {
+    const text = "For your work as Customer Success Manager, you receive the Order of Infinite Patience, as 743 client souls celebrate your support like a warm, sentient nebula transforming every difficult ticket into total productivity.";
+    const verified = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        text,
+        evidence: {
+          functionReference: "Customer Success Manager",
+          absurdMetaphor: "a warm, sentient nebula transforming every difficult ticket into total productivity",
+          madeUpStatistic: "743 client souls",
+        },
+      },
+      "Customer Success Manager",
+    );
+
+    expect(verified.guidelines.checks.find((check) => check.id === "made-up-statistic")).toMatchObject({ state: "pass" });
+    expect(verified.guidelines.checks.find((check) => check.id === "no-public-figure")).toMatchObject({ state: "pass" });
+  });
+
+  it("still rejects explicit celebrity wording and semantic public-figure comparisons", () => {
+    const explicit = verifyGuidelineOutput(
+      { ...COMPLIANT_MODEL_OUTPUT, text: COMPLIANT_TEXT.replace("cosmic", "celebrity") },
+      "Customer Success Manager",
+    );
+    const semantic = verifyGuidelineOutput(COMPLIANT_MODEL_OUTPUT, "Customer Success Manager", {
+      noAppearanceReference: true,
+      metaphorIsWildlyAbsurd: true,
+      noRealPublicFigureComparison: false,
+      workplaceAppropriate: true,
+      meaningfullyMoreDramatic: true,
+      notes: ["Compared the recipient to a real public figure."],
+    });
+
+    expect(explicit.guidelines.checks.find((check) => check.id === "no-public-figure")?.state).toBe("fail");
+    expect(semantic.guidelines.checks.find((check) => check.id === "no-public-figure")?.state).toBe("fail");
+  });
+
   it("extracts exact statistic evidence from valid compliment text when model evidence drifts", () => {
     const verified = verifyGuidelineOutput(
       {

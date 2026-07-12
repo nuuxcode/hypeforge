@@ -1,6 +1,7 @@
 "use client";
 
-import { Settings2, Volume2, X } from "lucide-react";
+import Link from "next/link";
+import { Activity, ArrowRight, Settings2, Volume2, X } from "lucide-react";
 import { Tooltip } from "@/components/tooltip";
 import { saveSoundEnabled, useSoundEnabled } from "@/lib/forge-sound";
 import { saveProofStyle, useProofStyle, type ProofHeadlineStyle } from "@/lib/proof-style";
@@ -106,6 +107,18 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         <p className="mt-4 text-xs font-medium leading-5 text-[var(--text-muted)]">
           Both styles show the same 8 rule checks; this only changes how the headline words them. Saved on this device.
         </p>
+
+        <div className="mt-6 border-t border-[var(--line)] pt-5">
+          <Link
+            className="flex min-h-12 items-center gap-3 rounded-[14px] border border-[var(--line)] bg-[var(--panel-raised)] px-4 text-sm font-semibold text-[var(--text)] transition hover:bg-[var(--control-hover)]"
+            href="/admin"
+          >
+            <Activity aria-hidden="true" className="size-5 text-[var(--accent)]" />
+            System diagnostics
+            <ArrowRight aria-hidden="true" className="ml-auto size-4 text-[var(--text-muted)]" />
+          </Link>
+          <p className="mt-2 text-xs font-medium text-[var(--text-muted)]">Private access to AI attempts, rule failures, and provider errors.</p>
+        </div>
       </section>
     </div>
   );

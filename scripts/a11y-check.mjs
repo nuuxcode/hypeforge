@@ -45,6 +45,20 @@ try {
   const guide = await guideContext.newPage();
   await guide.goto(`${baseUrl}/compliment-guide`, { waitUntil: "networkidle" });
   await audit("public compliment guide", guide, "main");
+
+  if (process.env.HYPEFORGE_ADMIN_CODE) {
+    const adminContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const admin = await adminContext.newPage();
+    await admin.goto(`${baseUrl}/admin`, { waitUntil: "networkidle" });
+    await audit("admin login", admin, "main");
+    await admin.getByLabel("Access code").fill(process.env.HYPEFORGE_ADMIN_CODE);
+    await Promise.all([
+      admin.waitForURL(`${baseUrl}/admin`),
+      admin.getByRole("button", { name: "Open diagnostics" }).click(),
+    ]);
+    await audit("admin diagnostics", admin, "main");
+    await adminContext.close();
+  }
 } finally {
   await browser.close();
 }
@@ -53,5 +67,5 @@ if (violations.length > 0) {
   console.error(JSON.stringify({ ok: false, violations }, null, 2));
   process.exitCode = 1;
 } else {
-  console.log(JSON.stringify({ ok: true, audited: 6 }, null, 2));
+  console.log(JSON.stringify({ ok: true, audited: process.env.HYPEFORGE_ADMIN_CODE ? 8 : 6 }, null, 2));
 }

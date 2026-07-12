@@ -53,7 +53,7 @@ describe("plain-language API diagnostics", () => {
     });
   });
 
-  it("prints an expanded nontechnical help group plus collapsed technical details", () => {
+  it("prints expanded nontechnical help and provider details for an API failure", () => {
     const group = vi.spyOn(console, "group").mockImplementation(() => undefined);
     const groupCollapsed = vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
     const groupEnd = vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
@@ -74,7 +74,43 @@ describe("plain-language API diagnostics", () => {
     expect(group).toHaveBeenCalledWith("[HypeForge Help] The AI draft was rejected by the company rules");
     expect(error).toHaveBeenCalledWith("What happened:", expect.stringContaining("did not pass all 8 required checks"));
     expect(info).toHaveBeenCalledWith("How to fix it:", expect.stringContaining("drama button again"));
-    expect(groupCollapsed).toHaveBeenCalledWith("[HypeForge Technical details] 1 provider error event");
+    expect(group).toHaveBeenCalledWith("[HypeForge Technical details] 1 provider error event • request request-123");
+    expect(info).toHaveBeenCalledWith("Plain-English meaning:", expect.stringContaining("Final failed checks"));
+
+    group.mockRestore();
+    groupCollapsed.mockRestore();
+    groupEnd.mockRestore();
+    error.mockRestore();
+    info.mockRestore();
+    log.mockRestore();
+    warn.mockRestore();
+  });
+
+  it("does not call a partial deck a success and explains the unavailable persona", () => {
+    const group = vi.spyOn(console, "group").mockImplementation(() => undefined);
+    const groupCollapsed = vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
+    const groupEnd = vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    logApiExchange({
+      endpoint: "POST /api/generate",
+      payload: { jobFunction: "Customer Success Manager" },
+      status: 200,
+      ok: true,
+      body: {
+        cards: [{ personaName: "Grand", text: "", status: "error", error: "Rule checks failed." }],
+        debug: guidelineFailure.debug,
+      },
+      startedAt: performance.now(),
+    });
+
+    expect(group).toHaveBeenCalledWith(expect.stringContaining("COMPLETED WITH 1 CARD ERROR"));
+    expect(group).toHaveBeenCalledWith("[HypeForge Help] The deck finished, but 1 card was unavailable");
+    expect(error).toHaveBeenCalledWith("Grand:", "Rule checks failed.");
+    expect(info).toHaveBeenCalledWith("How to investigate:", expect.stringContaining("/admin"));
 
     group.mockRestore();
     groupCollapsed.mockRestore();

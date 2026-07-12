@@ -282,6 +282,48 @@ export function apiFailureDiagnostic(args: {
   };
 }
 
+function failedCardsIn(body: unknown): Array<{ persona: string; message: string }> {
+  if (!body || typeof body !== "object" || !("cards" in body)) return [];
+  const cards = (body as { cards?: unknown }).cards;
+  if (!Array.isArray(cards)) return [];
+  return cards.flatMap((card) => {
+    if (!card || typeof card !== "object") return [];
+    const value = card as { status?: unknown; text?: unknown; personaName?: unknown; personaId?: unknown; error?: unknown };
+    if (value.status !== "error" && (typeof value.text !== "string" || value.text.trim())) return [];
+    return [{
+      persona: typeof value.personaName === "string" ? value.personaName : typeof value.personaId === "string" ? value.personaId : "Unknown persona",
+      message: typeof value.error === "string" ? value.error : "The card did not produce a valid compliment.",
+    }];
+  });
+}
+
+function nestedErrorMessages(value: unknown, seen = new WeakSet<object>()): string[] {
+  if (value instanceof Error) return [value.message];
+  if (typeof value === "string") return [value];
+  if (!value || typeof value !== "object" || seen.has(value)) return [];
+  seen.add(value);
+  const record = value as Record<string, unknown>;
+  return [record.message, record.error, record.mainError, record.backupError, record.cause]
+    .flatMap((item) => nestedErrorMessages(item, seen))
+    .filter((item, index, all) => item.trim() && all.indexOf(item) === index);
+}
+
+function providerEventExplanation(event: ApiDebug["events"][number]): string {
+  const details = detailsRecord(event.details);
+  const messages = nestedErrorMessages(details?.error ?? event.details);
+  if (/failed closed/i.test(event.message)) {
+    const rules = Array.isArray(details?.failedRuleIds) ? details.failedRuleIds.join(", ") : "one or more company rules";
+    return `All automatic drafts were rejected. Final failed checks: ${rules}.`;
+  }
+  if (/persona generation failed/i.test(event.message)) {
+    return `This persona could not produce a valid card. ${messages[0] ?? "See the attempt records in /admin for the rejected output."}`;
+  }
+  if (/attempt failed/i.test(event.message)) {
+    return `Gemini failed before HypeForge received a usable structured draft. ${messages[0] ?? "The provider returned an unknown error."}`;
+  }
+  return messages[0] ?? "The provider stage reported an error. Expand the details object below.";
+}
+
 // Dev-only structured console logging for every API exchange; production
 // builds compile this to a no-op via CLIENT_DEBUG.
 export function logApiExchange(args: {
@@ -298,15 +340,25 @@ export function logApiExchange(args: {
   const debug = getDebug(args.body);
   const requestId = debug?.requestId ?? "no-request-id";
   const statusLabel = args.status ? `${args.status}` : "network-error";
-  const okLabel = args.ok ? "ok" : "failed";
   const providerFailures =
     debug?.events.filter((event) => event.scope === "provider" && event.level === "error") ?? [];
+  const failedCards = failedCardsIn(args.body);
   const attemptCount =
     debug?.events.filter((event) => event.scope === "provider" && event.message === "guideline generation attempt started").length ?? 0;
   const requestAction = actionLabel(args.endpoint);
   const requestActionTitle = requestAction.charAt(0).toUpperCase() + requestAction.slice(1);
+  const resultLabel = !args.ok
+    ? "REJECTED"
+    : failedCards.length > 0
+      ? `COMPLETED WITH ${failedCards.length} CARD ERROR${failedCards.length === 1 ? "" : "S"}`
+      : providerFailures.length > 0
+        ? "COMPLETED AFTER AUTOMATIC RECOVERY"
+        : "SUCCEEDED";
+  const requestGroup = !args.ok || failedCards.length > 0 || providerFailures.length > 0
+    ? console.group
+    : console.groupCollapsed;
 
-  console.groupCollapsed(`[HypeForge Request] ${requestActionTitle} • ${okLabel === "ok" ? "SUCCEEDED" : "REJECTED"} • ${elapsedMs}ms`);
+  requestGroup(`[HypeForge Request] ${requestActionTitle} • ${resultLabel} • ${elapsedMs}ms`);
   console.log("Request reference", { requestId, endpoint: args.endpoint, httpStatus: statusLabel });
   console.log("Request payload", args.payload);
   if (args.body !== undefined) console.log("Response body", args.body);
@@ -341,12 +393,32 @@ export function logApiExchange(args: {
     console.groupEnd();
   }
 
-  // Preserve redacted provider data for developers without flooding the main console.
+  if (args.ok && failedCards.length > 0) {
+    console.group(`[HypeForge Help] The deck finished, but ${failedCards.length} card${failedCards.length === 1 ? " was" : "s were"} unavailable`);
+    console.warn("What happened:", `The API returned normally, but ${failedCards.length} persona pipeline${failedCards.length === 1 ? "" : "s"} did not produce a compliment that passed every company rule.`);
+    for (const card of failedCards) console.error(`${card.persona}:`, card.message);
+    console.info("What still worked:", "Every other valid card is safe to use. The unavailable card can be retried by itself.");
+    console.info("How to investigate:", "Open /admin for the rejected model output, failed rules, Gemini errors, key rotation, and full server timeline.");
+    console.info("Request reference:", { requestId, endpoint: args.endpoint, status: statusLabel, elapsedMs });
+    console.groupEnd();
+  } else if (args.ok && providerFailures.length > 0) {
+    console.group(`[HypeForge Help] Gemini stumbled, then HypeForge recovered automatically`);
+    console.warn("What happened:", `${providerFailures.length} provider stage${providerFailures.length === 1 ? "" : "s"} failed during this request, but a later attempt produced the visible result.`);
+    console.info("What you need to do:", "Nothing for this request. Open /admin if this repeats and you want to inspect the provider messages and rejected drafts.");
+    console.info("Request reference:", { requestId, endpoint: args.endpoint, status: statusLabel, elapsedMs });
+    console.groupEnd();
+  }
+
+  // Provider failures stay expanded: these are exactly the events developers need
+  // when the visible UI says that a card was preserved or could not be generated.
   if (providerFailures.length > 0) {
-    console.groupCollapsed(`[HypeForge Technical details] ${providerFailures.length} provider error event${providerFailures.length === 1 ? "" : "s"}`);
-    for (const event of providerFailures) {
-      console.log(event.message, { requestId, route: debug?.route, details: event.details });
+    console.group(`[HypeForge Technical details] ${providerFailures.length} provider error event${providerFailures.length === 1 ? "" : "s"} • request ${requestId}`);
+    for (const [index, event] of providerFailures.entries()) {
+      console.error(`${index + 1}. ${event.message}`);
+      console.info("Plain-English meaning:", providerEventExplanation(event));
+      console.log("Redacted technical payload:", { requestId, route: debug?.route, timestamp: event.timestamp, details: event.details });
     }
+    console.info("Persistent diagnostics:", `/admin (request ${requestId})`);
     console.groupEnd();
   }
 }
