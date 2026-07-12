@@ -324,6 +324,9 @@ export function V2ComplimentCard({
               <Copy aria-hidden="true" className="size-4" />
             )}
             {card.copied ? "Copied!" : "Copy"}
+            <span className="sr-only" role="status">
+              {card.copied ? `${card.personaName} compliment copied to clipboard` : ""}
+            </span>
           </button>
         </div>
 

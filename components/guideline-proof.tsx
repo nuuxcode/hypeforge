@@ -2,6 +2,7 @@
 
 import { Check, ChevronDown, CircleAlert, ShieldCheck } from "lucide-react";
 import { useState } from "react";
+import { useProofStyle } from "@/lib/proof-style";
 import type { GuidelineCompliance, RuleCheckSource } from "@/lib/types";
 
 const SOURCE_LABEL: Record<RuleCheckSource, string> = {
@@ -26,6 +27,7 @@ export function GuidelineProof({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const headlineStyle = useProofStyle();
 
   if (!guidelines) {
     return (
@@ -40,6 +42,18 @@ export function GuidelineProof({
 
   const passed = guidelines.checks.filter((item) => item.state === "pass").length;
   const fullyVerified = passed === 8;
+  // The honest headline distinguishes deterministic verification (code,
+  // evidence quotes, guard patterns) from the independent AI audit.
+  const codePassed = guidelines.checks.filter(
+    (item) => item.state === "pass" && item.source !== "model",
+  ).length;
+  const modelPassed = passed - codePassed;
+  const headline =
+    headlineStyle === "verified" ? `${passed}/8 guidelines verified` : `${passed}/8 checks passed`;
+  const sublabel =
+    headlineStyle === "verified"
+      ? `${guidelines.wordCount} words`
+      : `${codePassed} in code · ${modelPassed} by AI audit · ${guidelines.wordCount} words`;
 
   return (
     <section
@@ -57,11 +71,9 @@ export function GuidelineProof({
           className={`size-4 shrink-0 ${fullyVerified ? "text-[#47751f]" : "text-[var(--coral)]"}`}
         />
         <span className="min-w-0 flex-1">
-          <span className="block text-xs font-semibold text-[var(--ink)]">
-            {passed}/8 guidelines verified
-          </span>
+          <span className="block text-xs font-semibold text-[var(--ink)]">{headline}</span>
           <span className="block text-[0.68rem] font-medium text-[var(--ink-muted)]">
-            {guidelines.wordCount} words · {open ? "Hide details" : "View details"}
+            {sublabel} · {open ? "Hide details" : "View details"}
           </span>
         </span>
         <ChevronDown

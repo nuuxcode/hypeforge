@@ -4,7 +4,14 @@ import { ChevronDown, LoaderCircle, WandSparkles } from "lucide-react";
 import { useState } from "react";
 import { MAX_DETAILS_LENGTH, MAX_INPUT_LENGTH } from "@/lib/validate";
 
-const EXAMPLES = ["Customer Success Manager", "Founding Engineer", "Teacher"] as const;
+// One chip is a person-details description on purpose: it shows the input
+// takes more than bare job titles.
+const EXAMPLES = [
+  "Customer Success Manager",
+  "Founding Engineer",
+  "My friend Sara who fixes every crisis",
+  "Night-shift nurse",
+] as const;
 
 export function V2InputPanel({
   jobFunction,

@@ -55,6 +55,9 @@ export type Persona = {
   name: string;
   voice: string;
   bucket: PersonaBucket;
+  // One guideline-compliant compliment in this persona's voice, used as a
+  // few-shot anchor. Written for a person who never appears in real input.
+  example: string;
 };
 
 export type ComplimentCard = {

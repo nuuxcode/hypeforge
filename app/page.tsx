@@ -9,12 +9,14 @@ import {
   LoaderCircle,
   Moon,
   RotateCcw,
+  Settings2,
   Share2,
   Sparkles,
   Sun,
 } from "lucide-react";
 import { ComplimentGuideDialog } from "@/components/compliment-guide-dialog";
 import { DeckHistoryDrawer } from "@/components/deck-history-drawer";
+import { SettingsDialog } from "@/components/settings-dialog";
 import { Tooltip } from "@/components/tooltip";
 import { V2InputPanel } from "@/components/v2-input-panel";
 import { V2ComplimentCard } from "@/components/v2-compliment-card";
@@ -42,30 +44,16 @@ import {
   type TasteSignal,
 } from "@/lib/deck-history";
 import type {
-  ApiDebug,
-  ApiErrorResponse,
   ComplimentCard as ComplimentCardType,
   ComplimentCardVersion,
-  EscalateResponse,
   FeedbackVote,
-  GenerateResponse,
-  GuidelineCompliance,
   PersonaBucket,
-  TweakResponse,
 } from "@/lib/types";
 import { MAX_HISTORY_ITEMS, MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
-import {
-  activeVersionIdFor,
-  appendCardVersion,
-  createCardVersion,
-  hydrateCard,
-  hydrateCards,
-  versionsForCard,
-} from "@/lib/card-versions";
+import { appendCardVersion, createCardVersion, hydrateCard, hydrateCards } from "@/lib/card-versions";
 import {
   CLIENT_DEBUG,
   cardErrorMessage,
-  getDebug,
   globalErrorMessage,
   hasVisibleCards,
   isApiErrorResponse,
@@ -156,6 +144,7 @@ export default function V2Page() {
   const [currentDeckId, setCurrentDeckId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [versionPanels, setVersionPanels] = useState<CardVersionPanel>({});
   const [tweakCardId, setTweakCardId] = useState<string | null>(null);
   const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
@@ -823,6 +812,16 @@ export default function V2Page() {
                 )}
               </button>
             </Tooltip>
+            <Tooltip align="end" label="Open settings">
+              <button
+                aria-label="Open settings"
+                className="v2-header-button"
+                type="button"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <Settings2 aria-hidden="true" className="size-4" />
+              </button>
+            </Tooltip>
           </div>
         </div>
       </header>
@@ -956,6 +955,7 @@ export default function V2Page() {
         onRestore={restoreDeck}
       />
       <ComplimentGuideDialog open={guideOpen} onClose={() => setGuideOpen(false)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </main>
   );
 }
