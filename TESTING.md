@@ -31,6 +31,13 @@ gitleaks git . --redact --no-banner
 - A 720px CSS viewport, equivalent to a 1440px page viewed at 200% zoom, remains usable without clipping.
 - Real generation succeeded for the non-English role `Ingénieur logiciel`, with three 8/8 cards.
 
-## Production checks before submission
+## Production acceptance completed
 
-Run the same flows on the live HTTPS URL in an incognito window and on a physical phone. Confirm Blob-backed share links survive a new deployment and review host logs for unhandled errors.
+- The public HTTPS app, guide, sitemap, robots file, API routes, and shared-deck pages return successful responses.
+- Generate, retry, tweak, Drama 01 -> 02 -> 03 escalation, and share endpoints returned compliant `8/8` results without production debug payloads.
+- A Blob-backed share remained readable after multiple production deployments.
+- A fresh browser context verified proof expansion, current-version copy, mutually exclusive taste voting, earlier/later drama navigation, saved-deck interaction, public-deck import, and guide-to-generator state restoration.
+- The deployed browser produced no console, page, request, or CSP errors. Vercel reported no production error logs during acceptance testing.
+- Canonical, Open Graph, sitemap, and robots URLs use the public origin. Production responses include CSP, framing, MIME-sniffing, referrer, permissions, and HSTS policies.
+
+The only remaining device acceptance is a quick check on a physical phone and native Microsoft Edge before submission.
