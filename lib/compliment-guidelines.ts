@@ -1,3 +1,4 @@
+import "./zod-config";
 import { z } from "zod";
 import { cleanModelText, validateCompliment } from "./safeText";
 import type { SemanticEvaluation } from "./ai";

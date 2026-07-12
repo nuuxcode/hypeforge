@@ -1,3 +1,4 @@
+import "./zod-config";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, Output, type ModelMessage } from "ai";
 import { z } from "zod";

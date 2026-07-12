@@ -1,3 +1,4 @@
+import "./zod-config";
 import { z } from "zod";
 import { MAX_COMPLIMENT_LENGTH } from "./safeText";
 import { hasFunctionContext, VerifiedGuidelineComplianceSchema } from "./compliment-guidelines";
