@@ -239,16 +239,13 @@ export function V2ComplimentCard({
           ))}
         </span>
       ) : null}
-      <header className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold capitalize" style={{ color: BUCKET_ACCENT[bucket] }}>
-            {bucket}
-          </p>
-          <h2 className="v2-display mt-1 text-lg font-semibold leading-6 text-[var(--ink)]">{card.personaName}</h2>
-        </div>
+      <header className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1">
+        <p className="self-center text-xs font-semibold capitalize" style={{ color: BUCKET_ACCENT[bucket] }}>
+          {bucket}
+        </p>
         <div
           aria-label={`${badgeLabel(card.dramaLevel)}, version ${activeVersionIndex + 1} of ${versions.length}`}
-          className="v2-drama-badge v2-mono inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-full bg-[var(--paper-secondary)] text-[0.68rem] font-semibold text-[var(--ink)]"
+          className="v2-drama-badge v2-mono col-start-2 row-start-1 inline-flex h-8 shrink-0 items-stretch overflow-hidden rounded-full bg-[var(--paper-secondary)] text-[0.68rem] font-semibold text-[var(--ink)]"
           role="group"
         >
           <Tooltip align="end" label="View earlier version">
@@ -285,6 +282,9 @@ export function V2ComplimentCard({
             </button>
           </Tooltip>
         </div>
+        <h2 className="v2-display col-span-2 min-h-12 min-w-0 text-lg font-semibold leading-6 text-[var(--ink)]">
+          {card.personaName}
+        </h2>
       </header>
 
       <div
@@ -308,15 +308,12 @@ export function V2ComplimentCard({
         </div>
       </div>
 
-      <div className="mt-6 flex flex-1 flex-col space-y-5">
-        <div className="space-y-4">
+      <div className="mt-6 flex min-h-0 flex-1 flex-col">
+        <div className="flex flex-1 flex-col">
           {hasText ? (
-            <>
-              <p aria-live="polite" className="v2-card-copy v2-display text-base font-medium leading-7 text-[var(--ink)]" data-revealing={powerUpComplete ? "true" : "false"}>
-                {card.text}
-              </p>
-              <GuidelineProof guidelines={card.guidelines} />
-            </>
+            <p aria-live="polite" className="v2-card-copy v2-display text-base font-medium leading-7 text-[var(--ink)]" data-revealing={powerUpComplete ? "true" : "false"}>
+              {card.text}
+            </p>
           ) : (
             <div className="rounded-[18px] border border-dashed border-[var(--dark-line)] bg-[var(--paper-secondary)] p-4">
               <p className="text-sm font-bold leading-6 text-[var(--ink-muted)]">
@@ -326,13 +323,13 @@ export function V2ComplimentCard({
           )}
 
           {card.error && hasText ? (
-            <div className="rounded-[14px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 px-3 py-2 text-sm font-bold text-[#7b211b]">
+            <div className="mt-4 rounded-[14px] border border-[#ff6b5f]/40 bg-[#ff6b5f]/10 px-3 py-2 text-sm font-bold text-[#7b211b]">
               {card.error}
             </div>
           ) : null}
 
           {pendingAction === "escalate" && escalationProgress && !showAutomaticRepair ? (
-            <div aria-live="polite" className="flex min-h-6 items-center gap-2 text-xs font-medium text-[var(--ink-muted)]" role="status">
+            <div aria-live="polite" className="mt-4 flex min-h-6 items-center gap-2 text-xs font-medium text-[var(--ink-muted)]" role="status">
               <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin" style={{ color: BUCKET_ACCENT[bucket] }} />
               <span>{escalationProgress.message}</span>
             </div>
@@ -341,7 +338,7 @@ export function V2ComplimentCard({
           {pendingAction === "escalate" && escalationProgress && showAutomaticRepair ? (
             <div
               aria-live="polite"
-              className="rounded-[14px] border px-3 py-2.5"
+              className="mt-4 rounded-[14px] border px-3 py-2.5"
               role="status"
               style={{
                 borderColor: `color-mix(in srgb, ${BUCKET_ACCENT[bucket]} 38%, var(--line))`,
@@ -375,9 +372,15 @@ export function V2ComplimentCard({
               </div>
             </div>
           ) : null}
+
+          {hasText ? (
+            <div className="mt-auto pt-5">
+              <GuidelineProof guidelines={card.guidelines} />
+            </div>
+          ) : null}
         </div>
 
-        <div className="mt-auto grid gap-2 sm:grid-cols-2 lg:grid-cols-1 min-[1500px]:grid-cols-2">
+        <div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-1 min-[1500px]:grid-cols-2">
           {hasText ? (
             <button
               aria-label={
