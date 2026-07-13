@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { get, list, put } from "@vercel/blob";
 import type { GuidelineModelOutput } from "./compliment-guidelines";
-import type { ApiDebug, DeliveryMode, GuidelineCompliance } from "./types";
+import type { ApiDebug, DeliveryMode, GuidelineCompliance, PipelineFailureDetail } from "./types";
 
 export type AiAttemptOutcome = "accepted" | "rejected-candidate" | "provider-error" | "recovered";
 
@@ -17,11 +17,13 @@ export type AiFailureLogInput = {
   maxAttempts: number;
   outcome: AiAttemptOutcome;
   candidate?: GuidelineModelOutput;
+  baselineText?: string;
   compliance?: GuidelineCompliance;
   failedRuleIds?: string[];
   semanticNotes?: string[];
   dramaticFailure?: string;
   modeFailure?: string;
+  failureDetails?: PipelineFailureDetail[];
   error?: unknown;
 };
 
@@ -80,7 +82,7 @@ export async function captureAiFailure(input: AiFailureLogInput): Promise<void> 
     id: randomUUID(),
     createdAt,
     requestId: input.requestId,
-    promptVersion: "company-guidelines-v2.1-repair-v2",
+    promptVersion: "company-guidelines-v2.1-repair-v3",
     models: {
       main: process.env.GEMINI_MODEL_MAIN ?? "gemini-3.1-flash-lite",
       backup: process.env.GEMINI_MODEL_BACKUP ?? "gemini-3-flash-preview",
@@ -95,11 +97,13 @@ export async function captureAiFailure(input: AiFailureLogInput): Promise<void> 
     maxAttempts: input.maxAttempts,
     outcome: input.outcome,
     candidate: input.candidate,
+    baselineText: input.baselineText,
     compliance: input.compliance,
     failedRuleIds: input.failedRuleIds ?? [],
     semanticNotes: input.semanticNotes ?? [],
     dramaticFailure: input.dramaticFailure,
     modeFailure: input.modeFailure,
+    failureDetails: input.failureDetails ?? [],
     error: safeError(input.error),
   };
   const serialized = JSON.stringify(record);
@@ -149,11 +153,13 @@ export type AiAttemptLogRecord = {
   maxAttempts: number;
   outcome: AiAttemptOutcome;
   candidate?: GuidelineModelOutput;
+  baselineText?: string;
   compliance?: GuidelineCompliance;
   failedRuleIds: string[];
   semanticNotes: string[];
   dramaticFailure?: string;
   modeFailure?: string;
+  failureDetails?: PipelineFailureDetail[];
   error?: { name: string; message: string; stack?: string };
 };
 

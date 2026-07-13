@@ -54,7 +54,7 @@ describe("AI failure logging", () => {
     expect(record.subjectFingerprint).toMatch(/^[a-f0-9]{16}$/);
     expect(record.candidate.text).toBe(COMPLIANT_MODEL_OUTPUT.text);
     expect(record.failedRuleIds).toEqual(["made-up-statistic"]);
-    expect(record.promptVersion).toBe("company-guidelines-v2.1-repair-v2");
+    expect(record.promptVersion).toBe("company-guidelines-v2.1-repair-v3");
   });
 
   it("lists accepted model attempts and complete API traces from the local store", async () => {

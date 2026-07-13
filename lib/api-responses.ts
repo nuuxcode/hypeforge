@@ -132,8 +132,15 @@ export function cardErrorMessage(body: unknown, operation: CardOperation = "retr
   }
   if (isApiErrorResponse(body) && (/quota/i.test(body.error) || /too long/i.test(body.error))) return body.error;
   if (isApiErrorResponse(body) && /did not clear every Brand Team rule/i.test(body.error)) {
+    const failedIds = body.diagnostics?.failedRuleIds ?? [];
+    if (operation === "escalate" && failedIds.length === 1 && failedIds[0] === "dramatic-escalation") {
+      return "All 3 rewrites passed the company rules but were not clearly more dramatic, so we kept this version. Try again or tweak the direction.";
+    }
+    const failedLabels = failedIds.map((id) => RULE_HELP[id]?.label ?? id);
     if (operation === "escalate") {
-      return "All 3 automatic attempts missed a company rule, so we kept this valid compliment. You can try increasing the drama again.";
+      return failedLabels.length > 0
+        ? `All 3 rewrites were rejected (${failedLabels.join(", ")}), so we kept this valid compliment. Try increasing the drama again.`
+        : "All 3 automatic attempts missed a company rule, so we kept this valid compliment. You can try increasing the drama again.";
     }
     if (operation === "tweak") {
       return "The rewrite missed a company rule, so we kept this valid compliment. Adjust your note or try again.";
@@ -158,6 +165,8 @@ const RULE_HELP: Record<string, { label: string; explanation: string }> = {
   "no-literally": { label: "Banned word", explanation: "The draft used the banned word “literally”." },
   "no-public-figure": { label: "No public-figure comparison", explanation: "The draft may have compared the person to a real public figure." },
   "workplace-appropriate": { label: "Workplace appropriate", explanation: "The independent safety audit did not clearly approve the wording." },
+  "dramatic-escalation": { label: "Meaningfully more dramatic", explanation: "The rewrite passed the company rules but was not clearly more dramatic than the current version." },
+  "delivery-mode": { label: "Correct delivery point of view", explanation: "The draft used direct-address wording for a public post, or failed to address the recipient in a direct message." },
 };
 
 function detailsRecord(value: unknown): Record<string, unknown> | undefined {
@@ -198,7 +207,12 @@ export function apiFailureDiagnostic(args: {
   failedRuleLabels: string[];
 } {
   const debug = getDebug(args.body);
-  const ruleIds = failedRules(debug);
+  const responseDiagnostics = args.body && typeof args.body === "object"
+    ? (args.body as ApiErrorResponse).diagnostics
+    : undefined;
+  const ruleIds = responseDiagnostics?.failedRuleIds?.length
+    ? responseDiagnostics.failedRuleIds
+    : failedRules(debug);
   const ruleHelp = ruleIds.map((id) => RULE_HELP[id]).filter((item): item is { label: string; explanation: string } => Boolean(item));
   const responseError = isApiErrorResponse(args.body) ? args.body.error : "";
   const action = actionLabel(args.endpoint);
@@ -342,8 +356,16 @@ export function logApiExchange(args: {
   const statusLabel = args.status ? `${args.status}` : "network-error";
   const providerFailures =
     debug?.events.filter((event) => event.scope === "provider" && event.level === "error") ?? [];
+  const rejectedAttempts =
+    debug?.events.filter((event) => {
+      const details = detailsRecord(event.details);
+      return event.message === "guideline validation completed" && details?.accepted === false;
+    }) ?? [];
   const failedCards = failedCardsIn(args.body);
-  const attemptCount =
+  const responseDiagnostics = args.body && typeof args.body === "object"
+    ? (args.body as ApiErrorResponse).diagnostics
+    : undefined;
+  const attemptCount = responseDiagnostics?.attemptCount ??
     debug?.events.filter((event) => event.scope === "provider" && event.message === "guideline generation attempt started").length ?? 0;
   const requestAction = actionLabel(args.endpoint);
   const requestActionTitle = requestAction.charAt(0).toUpperCase() + requestAction.slice(1);
@@ -409,6 +431,40 @@ export function logApiExchange(args: {
     console.groupEnd();
   }
 
+  if (rejectedAttempts.length > 0) {
+    console.group(`[HypeForge Rejected AI drafts] ${rejectedAttempts.length} rejected attempt${rejectedAttempts.length === 1 ? "" : "s"} • request ${requestId}`);
+    for (const event of rejectedAttempts) {
+      const details = detailsRecord(event.details);
+      const attempt = typeof details?.attempt === "number" ? details.attempt : "?";
+      const candidate = detailsRecord(details?.rejectedCandidate);
+      const acceptedBaseline = typeof details?.acceptedBaseline === "string" ? details.acceptedBaseline : undefined;
+      const failureDetails = Array.isArray(details?.failureDetails)
+        ? details.failureDetails.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object"))
+        : [];
+      console.group(`Attempt ${attempt}/${attemptCount || "?"}`);
+      console.log("Full Gemini output:", candidate?.text ?? "No candidate text was returned.");
+      console.log("Structured Gemini response:", candidate ?? "No structured candidate was returned.");
+      if (acceptedBaseline) console.log("Accepted baseline used for comparison:", acceptedBaseline);
+      if (failureDetails.length === 0) {
+        console.error("Why it failed:", "No structured failure location was returned. Inspect the technical event payload below.");
+      }
+      for (const failure of failureDetails) {
+        console.error(`Failed check: ${String(failure.label ?? failure.ruleId ?? "Unknown rule")}`);
+        console.info("Why:", String(failure.reason ?? "No reason was supplied."));
+        console.info(
+          "Where:",
+          failure.location === "exact-fragment"
+            ? `Exact rejected fragment: “${String(failure.fragment ?? "")}”`
+            : failure.location === "missing"
+              ? "Missing from the output; there is no phrase to highlight."
+              : "The evaluator judged the complete output against the previous version.",
+        );
+      }
+      console.groupEnd();
+    }
+    console.groupEnd();
+  }
+
   // Provider failures stay expanded: these are exactly the events developers need
   // when the visible UI says that a card was preserved or could not be generated.
   if (providerFailures.length > 0) {
@@ -418,7 +474,11 @@ export function logApiExchange(args: {
       console.info("Plain-English meaning:", providerEventExplanation(event));
       console.log("Redacted technical payload:", { requestId, route: debug?.route, timestamp: event.timestamp, details: event.details });
     }
-    console.info("Persistent diagnostics:", `/admin (request ${requestId})`);
+    const diagnosticsPath = `/admin?request=${encodeURIComponent(requestId)}`;
+    const diagnosticsUrl = typeof window === "undefined"
+      ? diagnosticsPath
+      : new URL(diagnosticsPath, window.location.origin).href;
+    console.info("Persistent diagnostics:", diagnosticsUrl);
     console.groupEnd();
   }
 }

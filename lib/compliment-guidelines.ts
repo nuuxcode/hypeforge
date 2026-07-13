@@ -234,9 +234,14 @@ export function verifyGuidelineOutput(
   const resolvedStatisticEvidence = statisticEvidence(text, raw.evidence.madeUpStatistic);
   const statisticEvidencePresent = containsQuote(text, resolvedStatisticEvidence);
   const statisticLooksValid = STATISTIC_PATTERN.test(resolvedStatisticEvidence);
-  const appearanceGuardClear = !APPEARANCE_PATTERN.test(text);
-  const publicFigureGuardClear = !EXPLICIT_PUBLIC_FIGURE_PATTERN.test(text);
-  const workplaceGuardClear = !UNSAFE_WORKPLACE_PATTERN.test(text);
+  const appearanceMatch = text.match(APPEARANCE_PATTERN)?.[0];
+  const publicFigureMatch = text.match(EXPLICIT_PUBLIC_FIGURE_PATTERN)?.[0];
+  const workplaceMatch = text.match(UNSAFE_WORKPLACE_PATTERN)?.[0];
+  const literallyMatch = text.match(/\bliterally\b/i)?.[0];
+  const overflowFragment = text.trim().split(/\s+/).slice(40).join(" ") || undefined;
+  const appearanceGuardClear = !appearanceMatch;
+  const publicFigureGuardClear = !publicFigureMatch;
+  const workplaceGuardClear = !workplaceMatch;
 
   const checks: RuleCheck[] = [
     check({
@@ -254,6 +259,7 @@ export function verifyGuidelineOutput(
           ? "Independent semantic audit"
           : "Model self-check"
         : "Appearance wording detected",
+      evidence: appearanceMatch,
     }),
     check({
       id: "job-function",
@@ -289,12 +295,14 @@ export function verifyGuidelineOutput(
       source: "code",
       state: wordCount <= 40 ? "pass" : "fail",
       note: `${wordCount} / 40 words`,
+      evidence: overflowFragment,
     }),
     check({
       id: "no-literally",
       source: "code",
-      state: /\bliterally\b/i.test(text) ? "fail" : "pass",
-      note: /\bliterally\b/i.test(text) ? 'Banned word "literally" detected' : "Banned word absent",
+      state: literallyMatch ? "fail" : "pass",
+      note: literallyMatch ? 'Banned word "literally" detected' : "Banned word absent",
+      evidence: literallyMatch,
     }),
     check({
       id: "no-public-figure",
@@ -311,6 +319,7 @@ export function verifyGuidelineOutput(
           ? "Independent semantic audit"
           : "Model self-check"
         : "Real-person comparison pattern detected",
+      evidence: publicFigureMatch,
     }),
     check({
       id: "workplace-appropriate",
@@ -327,6 +336,7 @@ export function verifyGuidelineOutput(
           ? "Independent semantic audit"
           : "Model self-check"
         : "Unsafe workplace wording detected",
+      evidence: workplaceMatch,
     }),
   ];
 

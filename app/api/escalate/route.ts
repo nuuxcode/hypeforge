@@ -150,8 +150,15 @@ export async function POST(req: Request) {
       );
     } catch (error) {
       debug.providerError("escalation generation failed", error);
+      const diagnostics = isGuidelineComplianceError(error)
+        ? {
+            attemptCount: error.attemptCount,
+            failedRuleIds: error.failedRuleIds,
+            failureDetails: error.failureDetails,
+          }
+        : undefined;
       return withDebug(
-        { ok: false as const, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error) },
+        { ok: false as const, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error), diagnostics },
         debug.finish(),
       );
     }

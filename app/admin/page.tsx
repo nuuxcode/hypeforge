@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -116,11 +117,34 @@ function StatusIcon({ severity }: { severity: RequestGroup["severity"] }) {
   return <CheckCircle2 aria-hidden="true" className="size-5 text-[#2d7a3f]" />;
 }
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+function highlightedOutput(text: string, fragments: string[]): ReactNode {
+  const lower = text.toLocaleLowerCase();
+  const ranges = fragments
+    .map((fragment) => {
+      const start = lower.indexOf(fragment.toLocaleLowerCase());
+      return start >= 0 ? { start, end: start + fragment.length } : null;
+    })
+    .filter((range): range is { start: number; end: number } => Boolean(range))
+    .sort((a, b) => a.start - b.start);
+  if (ranges.length === 0) return text;
+
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.start < cursor) continue;
+    if (range.start > cursor) nodes.push(text.slice(cursor, range.start));
+    nodes.push(<mark className="rounded bg-[#ffe09a] px-0.5 text-[#442900]" key={`${range.start}-${range.end}`}>{text.slice(range.start, range.end)}</mark>);
+    cursor = range.end;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
+}
+
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ view?: string; request?: string }> }) {
   const cookieStore = await cookies();
   if (!verifyAdminSession(cookieStore.get(ADMIN_SESSION_COOKIE)?.value)) redirect("/admin/login");
 
-  const { view } = await searchParams;
+  const { view, request } = await searchParams;
   const activeView = view === "all" ? "all" : "issues";
   let loadError: string | null = null;
   let records: ObservabilityLogRecord[] = [];
@@ -130,7 +154,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
     loadError = error instanceof Error ? error.message : String(error);
   }
   const groups = groupRecords(records);
-  const visibleGroups = activeView === "issues" ? groups.filter((group) => group.severity !== "success") : groups;
+  const visibleGroups = request
+    ? groups.filter((group) => group.requestId === request)
+    : activeView === "issues"
+      ? groups.filter((group) => group.severity !== "success")
+      : groups;
   const issueCount = groups.filter((group) => group.severity !== "success").length;
   const tracedRequestIds = new Set(records.filter((record) => record.kind === "api-trace").map((record) => record.requestId));
   const providerErrorCount = records.reduce((count, record) => {
@@ -193,6 +221,13 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           </Link>
         </nav>
 
+        {request ? (
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#6e5ae6]/20 bg-[#6e5ae6]/[0.07] px-4 py-3 text-sm">
+            <p><span className="font-semibold">Exact request:</span> <span className="break-all font-mono text-xs">{request}</span></p>
+            <Link className="font-semibold text-[#5f4bd4] hover:underline" href="/admin?view=issues">Show all issues</Link>
+          </div>
+        ) : null}
+
         {loadError ? (
           <div className="mt-5 rounded-xl border border-[#e45c54]/30 bg-[#e45c54]/10 p-4 text-sm text-[#8f2924]" role="alert">
             <strong>Logs could not be loaded.</strong> {loadError}
@@ -203,11 +238,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           {visibleGroups.length === 0 ? (
             <div className="px-6 py-16 text-center">
               <Activity aria-hidden="true" className="mx-auto size-7 text-[#6e5ae6]" />
-              <h2 className="mt-4 text-lg font-semibold">{activeView === "issues" ? "No captured issues" : "No captured requests yet"}</h2>
-              <p className="mt-2 text-sm text-[#6e6e73]">Run the generator, then refresh this page.</p>
+              <h2 className="mt-4 text-lg font-semibold">{request ? "Request not found" : activeView === "issues" ? "No captured issues" : "No captured requests yet"}</h2>
+              <p className="mt-2 text-sm text-[#6e6e73]">{request ? "The request may predate persistent logs or fall outside the current retention window." : "Run the generator, then refresh this page."}</p>
             </div>
           ) : visibleGroups.map((group) => (
-            <details className="group border-b border-black/10 last:border-b-0" key={group.requestId}>
+            <details className="group border-b border-black/10 last:border-b-0" key={group.requestId} open={Boolean(request)}>
               <summary className="flex cursor-pointer list-none items-start gap-4 px-4 py-5 transition hover:bg-[#f5f5f7] sm:px-6">
                 <span className="mt-0.5"><StatusIcon severity={group.severity} /></span>
                 <span className="min-w-0 flex-1">
@@ -243,10 +278,44 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                       {attempt.failedRuleIds.length > 0 ? (
                         <div className="mt-3 flex flex-wrap gap-2">{attempt.failedRuleIds.map((rule) => <span className="rounded-md bg-[#e45c54]/10 px-2 py-1 text-xs font-semibold text-[#8f2924]" key={rule}>{rule}</span>)}</div>
                       ) : null}
-                      {attempt.candidate?.text ? (
+                      {attempt.failureDetails?.length ? (
+                        <div className="mt-4 space-y-2">
+                          {attempt.failureDetails.map((failure, failureIndex) => (
+                            <div className="rounded-lg border border-[#e45c54]/20 bg-[#e45c54]/[0.06] px-3 py-2.5" key={`${failure.ruleId}-${failureIndex}`}>
+                              <p className="text-sm font-semibold text-[#8f2924]">{failure.label}</p>
+                              <p className="mt-1 text-sm leading-5 text-[#3a3a3f]">{failure.reason}</p>
+                              <p className="mt-1 text-xs font-medium text-[#6e6e73]">
+                                {failure.location === "exact-fragment"
+                                  ? `Highlighted below: “${failure.fragment}”`
+                                  : failure.location === "missing"
+                                    ? "Missing from the model output"
+                                    : "The complete rewrite failed the comparison against the previous version"}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : null}
+                      {attempt.candidate?.text && !attempt.failureDetails?.some((failure) => failure.location === "whole-output") ? (
                         <div className="mt-4 border-l-2 border-[#6e5ae6] pl-4">
                           <p className="text-xs font-semibold uppercase text-[#6e6e73]">Complete model draft</p>
-                          <p className="mt-2 text-sm leading-6">{attempt.candidate.text}</p>
+                          <p className="mt-2 text-sm leading-6">
+                            {highlightedOutput(
+                              attempt.candidate.text,
+                              (attempt.failureDetails ?? []).flatMap((failure) => failure.location === "exact-fragment" && failure.fragment ? [failure.fragment] : []),
+                            )}
+                          </p>
+                        </div>
+                      ) : null}
+                      {attempt.baselineText && attempt.failureDetails?.some((failure) => failure.location === "whole-output") ? (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          <div className="rounded-lg border border-black/10 bg-[#f5f5f7] p-3">
+                            <p className="text-xs font-semibold uppercase text-[#6e6e73]">Accepted baseline</p>
+                            <p className="mt-2 text-sm leading-6 text-[#3a3a3f]">{attempt.baselineText}</p>
+                          </div>
+                          <div className="rounded-lg border border-[#e45c54]/20 bg-[#e45c54]/[0.04] p-3">
+                            <p className="text-xs font-semibold uppercase text-[#8f2924]">Rejected rewrite</p>
+                            <p className="mt-2 text-sm leading-6 text-[#3a3a3f]">{attempt.candidate?.text ?? "No draft returned"}</p>
+                          </div>
                         </div>
                       ) : null}
                       <details className="mt-4 rounded-lg bg-[#f5f5f7] p-3">

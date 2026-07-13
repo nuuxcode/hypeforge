@@ -153,14 +153,26 @@ describe("generateCompliantCompliment", () => {
       meaningfullyMoreDramatic: false,
       notes: ["This is only a paraphrase."],
     });
-    await expect(
-      generateCompliantCompliment({
+    const flatEscalation = generateCompliantCompliment({
         ...baseArgs(),
         operation: "escalate",
         previousText: "The earlier compliment.",
-      }),
-    ).rejects.toBeInstanceOf(GuidelineComplianceError);
+      });
+    await expect(flatEscalation).rejects.toMatchObject({
+      name: "GuidelineComplianceError",
+      attemptCount: 3,
+      failedRuleIds: ["dramatic-escalation"],
+      failureDetails: [expect.objectContaining({
+        ruleId: "dramatic-escalation",
+        location: "whole-output",
+        reason: "This is only a paraphrase.",
+      })],
+    });
     expect(generateGuidelineCandidate).toHaveBeenCalledTimes(3);
+    const repairPrompt = JSON.stringify(vi.mocked(generateGuidelineCandidate).mock.calls[1]?.[0]);
+    expect(repairPrompt).toContain("Accepted baseline that must be clearly surpassed: The earlier compliment.");
+    expect(repairPrompt).toContain("Rejected draft that did not pass:");
+    expect(repairPrompt).toContain("Switch domains completely");
   });
 
   it("reports the real three-attempt escalation progress sequence", async () => {
@@ -203,5 +215,35 @@ describe("generateCompliantCompliment", () => {
       { attempt: 3, phase: "generating" },
       { attempt: 3, phase: "checking" },
     ]);
+    expect(progress[2]).toMatchObject({ attempt: 1, phase: "repairing" });
+  });
+
+  it("keeps the rejected output and exact failing fragment in server diagnostics", async () => {
+    const invalid = {
+      ...COMPLIANT_MODEL_OUTPUT,
+      text: COMPLIANT_MODEL_OUTPUT.text.replace("cosmic", "literally cosmic"),
+      evidence: {
+        ...COMPLIANT_MODEL_OUTPUT.evidence,
+        absurdMetaphor: "a literally cosmic air-traffic controller for client chaos",
+      },
+    };
+    const args = baseArgs();
+    vi.mocked(generateGuidelineCandidate).mockResolvedValue(invalid);
+
+    await expect(generateCompliantCompliment(args)).rejects.toBeInstanceOf(GuidelineComplianceError);
+    const validation = args.debug.debug.events.findLast((event) => event.message === "guideline validation completed");
+    const failedClosed = args.debug.debug.events.findLast((event) => event.message === "guideline compliance failed closed");
+
+    expect(validation?.details).toMatchObject({
+      accepted: false,
+      rejectedCandidate: { text: invalid.text },
+      failureDetails: expect.arrayContaining([
+        expect.objectContaining({ ruleId: "no-literally", fragment: "literally", location: "exact-fragment" }),
+      ]),
+    });
+    expect(failedClosed?.details).toMatchObject({
+      failedRuleIds: expect.arrayContaining(["no-literally"]),
+      rejectedCandidate: { text: invalid.text },
+    });
   });
 });

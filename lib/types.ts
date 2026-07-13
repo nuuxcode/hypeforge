@@ -2,12 +2,22 @@ export type CardStatus = "idle" | "loading" | "error";
 export type CardPendingAction = "escalate" | "retry" | "tweak";
 export type EscalationProgressPhase = "generating" | "checking" | "repairing";
 
+export type PipelineFailureDetail = {
+  ruleId: string;
+  label: string;
+  reason: string;
+  location: "missing" | "exact-fragment" | "whole-output";
+  fragment?: string;
+  source?: string;
+};
+
 export type EscalationProgress = {
   attempt: number;
   maxAttempts: number;
   phase: EscalationProgressPhase;
   message: string;
   failedRuleIds?: string[];
+  failureDetails?: PipelineFailureDetail[];
 };
 
 export type EscalationStreamEvent =
@@ -146,6 +156,11 @@ export type ApiErrorResponse = {
   error: string;
   resetAt?: number;
   cards?: ComplimentCard[];
+  diagnostics?: {
+    attemptCount?: number;
+    failedRuleIds?: string[];
+    failureDetails?: PipelineFailureDetail[];
+  };
   debug?: ApiDebug;
 };
 

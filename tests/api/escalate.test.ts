@@ -144,4 +144,41 @@ describe("POST /api/escalate", () => {
     expect(events.filter((event) => event.type === "progress")).toHaveLength(4);
     expect(events.at(-1)).toMatchObject({ type: "result", body: { ok: true, dramaLevel: 2 } });
   });
+
+  it("returns safe exact failure diagnostics when all rewrites are rejected", async () => {
+    const error = Object.assign(new Error("This compliment did not clear every Brand Team rule. Try this card again."), {
+      name: "GuidelineComplianceError",
+      attemptCount: 3,
+      failedRuleIds: ["dramatic-escalation"],
+      failureDetails: [{
+        ruleId: "dramatic-escalation",
+        label: "Meaningfully more dramatic",
+        reason: "The rewrite was only a paraphrase.",
+        location: "whole-output",
+      }],
+    });
+    vi.mocked(generateCompliantCompliment).mockRejectedValueOnce(error);
+
+    const response = await POST(new Request("http://localhost/api/escalate", {
+      method: "POST",
+      body: JSON.stringify({
+        personaId: "epic-bard",
+        originalInput: "Customer Success Manager",
+        currentText,
+        history: [currentText],
+        dramaLevel: 1,
+        deliveryMode: "direct",
+      }),
+    }));
+    const body = await response.json();
+
+    expect(body).toMatchObject({
+      ok: false,
+      diagnostics: {
+        attemptCount: 3,
+        failedRuleIds: ["dramatic-escalation"],
+        failureDetails: [expect.objectContaining({ location: "whole-output" })],
+      },
+    });
+  });
 });

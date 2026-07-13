@@ -10,6 +10,27 @@ const guidelineFailure = {
     startedAt: "2026-07-12T19:00:00.000Z",
     events: [
       {
+        timestamp: "2026-07-12T19:00:00.500Z",
+        level: "info" as const,
+        scope: "provider" as const,
+        message: "guideline validation completed",
+        details: {
+          attempt: 1,
+          accepted: false,
+          failedRuleIds: ["made-up-statistic"],
+          rejectedCandidate: {
+            text: "You coordinate client calm like a cosmic lighthouse without a numeric claim.",
+            evidence: { madeUpStatistic: "an impossible amount" },
+          },
+          failureDetails: [{
+            ruleId: "made-up-statistic",
+            label: "Made-up statistic",
+            reason: "No statistic pattern detected",
+            location: "missing",
+          }],
+        },
+      },
+      {
         timestamp: "2026-07-12T19:00:01.000Z",
         level: "error" as const,
         scope: "provider" as const,
@@ -75,6 +96,10 @@ describe("plain-language API diagnostics", () => {
     expect(error).toHaveBeenCalledWith("What happened:", expect.stringContaining("did not pass all 8 required checks"));
     expect(info).toHaveBeenCalledWith("How to fix it:", expect.stringContaining("drama button again"));
     expect(group).toHaveBeenCalledWith("[HypeForge Technical details] 1 provider error event • request request-123");
+    expect(group).toHaveBeenCalledWith("[HypeForge Rejected AI drafts] 1 rejected attempt • request request-123");
+    expect(log).toHaveBeenCalledWith("Full Gemini output:", expect.stringContaining("cosmic lighthouse"));
+    expect(error).toHaveBeenCalledWith("Failed check: Made-up statistic");
+    expect(info).toHaveBeenCalledWith("Where:", "Missing from the output; there is no phrase to highlight.");
     expect(info).toHaveBeenCalledWith("Plain-English meaning:", expect.stringContaining("Final failed checks"));
 
     group.mockRestore();

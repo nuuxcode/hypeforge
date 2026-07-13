@@ -124,6 +124,9 @@ export function V2ComplimentCard({
   const atDramaCap = isAtDramaCap(card.dramaLevel);
   const currentStage = dramaStage(card.dramaLevel);
   const nextStage = dramaStage(card.dramaLevel + 1);
+  const showAutomaticRepair = Boolean(
+    escalationProgress && (escalationProgress.phase === "repairing" || escalationProgress.attempt > 1),
+  );
   const [powerUpComplete, setPowerUpComplete] = useState(false);
   const [levelUpNotice, setLevelUpNotice] = useState(false);
   const wasLoading = useRef(isLoading);
@@ -328,7 +331,14 @@ export function V2ComplimentCard({
             </div>
           ) : null}
 
-          {pendingAction === "escalate" && escalationProgress ? (
+          {pendingAction === "escalate" && escalationProgress && !showAutomaticRepair ? (
+            <div aria-live="polite" className="flex min-h-6 items-center gap-2 text-xs font-medium text-[var(--ink-muted)]" role="status">
+              <LoaderCircle aria-hidden="true" className="size-3.5 shrink-0 animate-spin" style={{ color: BUCKET_ACCENT[bucket] }} />
+              <span>{escalationProgress.message}</span>
+            </div>
+          ) : null}
+
+          {pendingAction === "escalate" && escalationProgress && showAutomaticRepair ? (
             <div
               aria-live="polite"
               className="rounded-[14px] border px-3 py-2.5"
@@ -345,6 +355,11 @@ export function V2ComplimentCard({
                 </span>
               </div>
               <p className="mt-1 text-sm font-semibold leading-5 text-[var(--ink)]">{escalationProgress.message}</p>
+              {escalationProgress.failureDetails?.length ? (
+                <p className="mt-1 text-xs font-medium leading-5 text-[var(--ink-muted)]">
+                  Fixing: {escalationProgress.failureDetails.map((failure) => failure.label).join(", ")}
+                </p>
+              ) : null}
               <div aria-hidden="true" className="mt-2 grid grid-cols-3 gap-1.5">
                 {Array.from({ length: escalationProgress.maxAttempts }, (_, attemptIndex) => (
                   <span
@@ -391,11 +406,9 @@ export function V2ComplimentCard({
               )}
               {pendingAction === "escalate"
                 ? escalationProgress
-                  ? escalationProgress.phase === "checking"
-                    ? `Checking rules · ${escalationProgress.attempt}/${escalationProgress.maxAttempts}`
-                    : escalationProgress.phase === "repairing"
-                      ? `Repairing · ${escalationProgress.attempt}/${escalationProgress.maxAttempts}`
-                      : `Increasing drama · ${escalationProgress.attempt}/${escalationProgress.maxAttempts}`
+                  ? showAutomaticRepair
+                    ? `Repairing automatically · ${escalationProgress.attempt}/${escalationProgress.maxAttempts}`
+                    : `Working on ${nextStage.label}…`
                   : `Charging ${nextStage.label}…`
                 : levelUpNotice
                   ? atDramaCap

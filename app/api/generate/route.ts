@@ -230,6 +230,10 @@ export async function POST(req: Request) {
   });
 
   if (cards.every((card) => card.status === "error")) {
+    const firstError = settled[0]?.status === "rejected" ? settled[0].reason : undefined;
+    const diagnostics = isGuidelineComplianceError(firstError)
+      ? { attemptCount: firstError.attemptCount, failedRuleIds: firstError.failedRuleIds, failureDetails: firstError.failureDetails }
+      : undefined;
     debug.error("all personas failed", settled.map((result, index) => ({
       personaId: selected[index]?.id,
       reason: result.status === "rejected" ? result.reason : undefined,
@@ -239,10 +243,11 @@ export async function POST(req: Request) {
         {
           ok: false,
           error:
-            settled[0]?.status === "rejected" && isGuidelineComplianceError(settled[0].reason)
-              ? settled[0].reason.message
-              : providerErrorMessage(settled[0]?.status === "rejected" ? settled[0].reason : undefined),
+            isGuidelineComplianceError(firstError)
+              ? firstError.message
+              : providerErrorMessage(firstError),
           cards,
+          diagnostics,
         },
         debug.finish(),
       ),

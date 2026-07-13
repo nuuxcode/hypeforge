@@ -128,9 +128,12 @@ export async function POST(req: Request) {
     );
   } catch (error) {
     debug.providerError("tweak generation failed", error);
+    const diagnostics = isGuidelineComplianceError(error)
+      ? { attemptCount: error.attemptCount, failedRuleIds: error.failedRuleIds, failureDetails: error.failureDetails }
+      : undefined;
     return Response.json(
       withDebug(
-        { ok: false, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error) },
+        { ok: false, error: isGuidelineComplianceError(error) ? error.message : providerErrorMessage(error), diagnostics },
         debug.finish(),
       ),
       { headers: { "Set-Cookie": setCookie } },

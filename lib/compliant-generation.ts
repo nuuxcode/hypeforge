@@ -7,8 +7,9 @@ import {
   hasFunctionContext,
   verifyGuidelineOutput,
 } from "./compliment-guidelines";
+import type { GuidelineModelOutput } from "./compliment-guidelines";
 import type { createApiDebug } from "./debug";
-import type { DeliveryMode, GuidelineCompliance } from "./types";
+import type { DeliveryMode, GuidelineCompliance, PipelineFailureDetail, RuleCheck } from "./types";
 
 type DebugLogger = ReturnType<typeof createApiDebug>;
 export type ComplianceProgress = {
@@ -17,6 +18,7 @@ export type ComplianceProgress = {
   phase: "generating" | "checking" | "repairing";
   message: string;
   failedRuleIds?: string[];
+  failureDetails?: PipelineFailureDetail[];
 };
 const SECOND_PERSON_PATTERN = /\b(?:you|your|yours|yourself|you're|you've|you'll|you\u2019re|you\u2019ve|you\u2019ll)\b/i;
 
@@ -31,13 +33,71 @@ function deliveryModeFailure(text: string, mode: DeliveryMode): string | undefin
   return undefined;
 }
 
+function includesFragment(text: string, fragment?: string): fragment is string {
+  return Boolean(fragment && text.toLocaleLowerCase().includes(fragment.toLocaleLowerCase()));
+}
+
+function buildFailureDetails(args: {
+  candidate: GuidelineModelOutput;
+  failures: RuleCheck[];
+  semanticNotes?: string[];
+  dramaticFailure?: string;
+  modeFailure?: string;
+}): PipelineFailureDetail[] {
+  const semanticReason = args.semanticNotes?.join(" ");
+  const details: PipelineFailureDetail[] = args.failures.map((failure) => {
+    const fragment = includesFragment(args.candidate.text, failure.evidence) ? failure.evidence : undefined;
+    const semanticJudgment = failure.source === "model" && !fragment;
+    return {
+      ruleId: failure.id,
+      label: failure.label,
+      reason: semanticJudgment && semanticReason ? semanticReason : failure.note ?? "The rule did not pass.",
+      location: fragment ? "exact-fragment" : semanticJudgment ? "whole-output" : "missing",
+      fragment,
+      source: failure.source,
+    };
+  });
+
+  if (args.dramaticFailure) {
+    details.push({
+      ruleId: "dramatic-escalation",
+      label: "Meaningfully more dramatic",
+      reason: semanticReason ?? "The rewrite changed words but did not clearly increase the scale, stakes, ceremony, consequences, or emotional intensity.",
+      location: "whole-output",
+      source: "model",
+    });
+  }
+  if (args.modeFailure) {
+    const secondPerson = args.candidate.text.match(SECOND_PERSON_PATTERN)?.[0];
+    details.push({
+      ruleId: "delivery-mode",
+      label: "Correct delivery point of view",
+      reason: args.modeFailure.replace(/^delivery-mode:\s*/, ""),
+      location: secondPerson ? "exact-fragment" : "missing",
+      fragment: secondPerson,
+      source: "code",
+    });
+  }
+  return details;
+}
+
 export class GuidelineComplianceError extends Error {
   readonly guidelines?: GuidelineCompliance;
+  readonly failedRuleIds: string[];
+  readonly failureDetails: PipelineFailureDetail[];
+  readonly attemptCount: number;
 
-  constructor(message: string, guidelines?: GuidelineCompliance) {
+  constructor(
+    message: string,
+    guidelines?: GuidelineCompliance,
+    diagnostics: { failedRuleIds?: string[]; failureDetails?: PipelineFailureDetail[]; attemptCount?: number } = {},
+  ) {
     super(message);
     this.name = "GuidelineComplianceError";
     this.guidelines = guidelines;
+    this.failedRuleIds = diagnostics.failedRuleIds ?? [];
+    this.failureDetails = diagnostics.failureDetails ?? [];
+    this.attemptCount = diagnostics.attemptCount ?? 0;
   }
 }
 
@@ -47,7 +107,8 @@ export function isGuidelineComplianceError(error: unknown): error is GuidelineCo
 
 function repairInstruction(args: {
   subject: string;
-  previousText?: string;
+  acceptedBaseline?: string;
+  rejectedDraft?: string;
   guidelines?: GuidelineCompliance;
   schemaFailure?: string;
   extraFailures?: string[];
@@ -74,17 +135,30 @@ function repairInstruction(args: {
       ? "- For max-40-words: rewrite to 34-38 whitespace-separated words before returning the object."
       : undefined,
   ].filter((item): item is string => Boolean(item));
+  const repeatedCosmicImagery = /\b(?:cosmic|galactic|nebula|supernova|planet|orbit|universe|reality|entropy|star|sun|moon|celestial)\b/i.test(
+    `${args.acceptedBaseline ?? ""} ${args.rejectedDraft ?? ""}`,
+  );
+  const escalationHint = args.extraFailures?.some((failure) => failure.startsWith("dramatic-escalation"))
+    ? [
+        "- For dramatic-escalation: the accepted baseline below is the score to beat. The rejected draft is only an example of what did not improve enough.",
+        "- Increase at least two dimensions: scale, stakes, impossible consequences, mock ceremony, or emotional intensity.",
+        "- Use a genuinely different metaphor category and a different statistic; do not paraphrase either prior version.",
+        repeatedCosmicImagery
+          ? "- Do not use space, stars, planets, cosmic forces, time, reality, or entropy in this repair. Switch domains completely, such as courtroom, engineering, music, sports, weather, or mythology."
+          : "- Do not reuse the dominant imagery from either prior version; switch metaphor domains completely.",
+      ]
+    : [];
 
   return {
     role: "user",
     content: `Your previous attempt did not clear the Company Compliment Guidelines v2.1.
 Subject: ${args.subject}
-${args.previousText ? `Previous compliment: ${args.previousText}\n` : ""}Fix these failures:
+${args.acceptedBaseline ? `Accepted baseline that must be clearly surpassed: ${args.acceptedBaseline}\n` : ""}${args.rejectedDraft ? `Rejected draft that did not pass: ${args.rejectedDraft}\n` : ""}Fix these failures:
 ${failures}
-${targetedHints.length > 0 ? `\nUse these exact repair instructions:\n${targetedHints.join("\n")}\n` : ""}
+${targetedHints.length + escalationHint.length > 0 ? `\nUse these exact repair instructions:\n${[...targetedHints, ...escalationHint].join("\n")}\n` : ""}
 
 Rewrite the compliment. Preserve the requested persona and operation, target 34 to 38 words, and return the complete structured object with fresh exact evidence.
-If dramatic-escalation failed, do not merely swap imagery: increase at least two of scale, stakes, impossible consequences, mock ceremony, or emotional intensity, and use a different metaphor category and statistic. Do not explain the correction.`,
+Do not explain the correction.`,
   };
 }
 
@@ -106,6 +180,10 @@ export async function generateCompliantCompliment(args: {
 
   let repair: ModelMessage | undefined;
   let latestCompliance: GuidelineCompliance | undefined;
+  let latestRejectedRuleIds: string[] = [];
+  let latestFailureDetails: PipelineFailureDetail[] = [];
+  let latestCandidate: GuidelineModelOutput | undefined;
+  let latestProviderError: unknown;
   const onKeyEvent = (event: GeminiKeyPoolEvent) => {
     if (event.type === "failure") {
       args.debug.providerInfo("Gemini key failure recorded", {
@@ -180,11 +258,19 @@ export async function generateCompliantCompliment(args: {
           ? "dramatic-escalation: the revision was not meaningfully more dramatic than the previous version"
           : undefined;
       const modeFailure = deliveryModeFailure(verified.text, args.deliveryMode ?? "direct");
+      const accepted = verified.passed && !dramaticFailure && !modeFailure;
+      const failureDetails = buildFailureDetails({
+        candidate,
+        failures,
+        semanticNotes: semantic?.notes,
+        dramaticFailure,
+        modeFailure,
+      });
       args.debug.providerInfo("guideline validation completed", {
         operation: args.operation,
         personaId: args.personaId,
         attempt,
-        accepted: verified.passed && !dramaticFailure && !modeFailure,
+        accepted,
         wordCount: verified.guidelines.wordCount,
         failedRuleIds: failures.map((item) => item.id),
         failures: failures.map((item) => ({
@@ -196,9 +282,13 @@ export async function generateCompliantCompliment(args: {
         semanticNotes: semantic?.notes,
         dramaticFailure,
         modeFailure,
+        acceptedBaseline: args.operation === "escalate" ? args.previousText : undefined,
+        failureDetails,
+        baselineText: args.operation === "escalate" ? args.previousText : undefined,
+        rejectedCandidate: accepted ? undefined : candidate,
       });
 
-      if (verified.passed && !dramaticFailure && !modeFailure) {
+      if (accepted) {
         await captureAiFailure({
           requestId: args.debug.debug.requestId,
           operation: args.operation,
@@ -219,6 +309,9 @@ export async function generateCompliantCompliment(args: {
         ...(dramaticFailure ? ["dramatic-escalation"] : []),
         ...(modeFailure ? ["delivery-mode"] : []),
       ];
+      latestRejectedRuleIds = rejectedRuleIds;
+      latestFailureDetails = failureDetails;
+      latestCandidate = candidate;
       await captureAiFailure({
         requestId: args.debug.debug.requestId,
         operation: args.operation,
@@ -229,11 +322,13 @@ export async function generateCompliantCompliment(args: {
         maxAttempts,
         outcome: "rejected-candidate",
         candidate,
+        baselineText: args.operation === "escalate" ? args.previousText : undefined,
         compliance: verified.guidelines,
         failedRuleIds: rejectedRuleIds,
         semanticNotes: semantic?.notes,
         dramaticFailure,
         modeFailure,
+        failureDetails,
       });
       if (attempt < maxAttempts) {
         args.onProgress?.({
@@ -242,15 +337,18 @@ export async function generateCompliantCompliment(args: {
           phase: "repairing",
           message: `Attempt ${attempt} missed ${rejectedRuleIds.length === 1 ? "1 rule" : `${rejectedRuleIds.length} rules`}. Repairing automatically…`,
           failedRuleIds: rejectedRuleIds,
+          failureDetails,
         });
       }
       repair = repairInstruction({
         subject: args.subject,
-        previousText: verified.text,
+        acceptedBaseline: args.operation === "escalate" ? args.previousText : undefined,
+        rejectedDraft: verified.text,
         guidelines: verified.guidelines,
         extraFailures: [dramaticFailure, modeFailure].filter((item): item is string => Boolean(item)),
       });
     } catch (error) {
+      latestProviderError = error;
       args.debug.providerError("guideline generation attempt failed", {
         operation: args.operation,
         personaId: args.personaId,
@@ -281,13 +379,19 @@ export async function generateCompliantCompliment(args: {
     }
   }
 
+  if (!latestCandidate && latestProviderError) throw latestProviderError;
+
   args.debug.providerError("guideline compliance failed closed", {
     operation: args.operation,
     personaId: args.personaId,
-    failedRuleIds: latestCompliance ? failedGuidelineChecks(latestCompliance).map((item) => item.id) : [],
+    failedRuleIds: latestRejectedRuleIds,
+    failureDetails: latestFailureDetails,
+    rejectedCandidate: latestCandidate,
+    acceptedBaseline: args.operation === "escalate" ? args.previousText : undefined,
   });
   throw new GuidelineComplianceError(
     "This compliment did not clear every Brand Team rule. Try this card again.",
     latestCompliance,
+    { failedRuleIds: latestRejectedRuleIds, failureDetails: latestFailureDetails, attemptCount: maxAttempts },
   );
 }
