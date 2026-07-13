@@ -9,6 +9,7 @@ vi.mock("@/lib/ai", () => ({
   evaluateGuidelineSemantics: vi.fn(async () => ({
     noAppearanceReference: true,
     metaphorIsWildlyAbsurd: true,
+    statisticIsClearlyFictional: true,
     noRealPublicFigureComparison: true,
     workplaceAppropriate: true,
     meaningfullyMoreDramatic: true,
@@ -126,6 +127,7 @@ describe("generateCompliantCompliment", () => {
       .mockResolvedValueOnce({
         noAppearanceReference: true,
         metaphorIsWildlyAbsurd: false,
+        statisticIsClearlyFictional: true,
         noRealPublicFigureComparison: true,
         workplaceAppropriate: true,
         meaningfullyMoreDramatic: true,
@@ -134,6 +136,7 @@ describe("generateCompliantCompliment", () => {
       .mockResolvedValueOnce({
         noAppearanceReference: true,
         metaphorIsWildlyAbsurd: true,
+        statisticIsClearlyFictional: true,
         noRealPublicFigureComparison: true,
         workplaceAppropriate: true,
         meaningfullyMoreDramatic: true,
@@ -148,6 +151,7 @@ describe("generateCompliantCompliment", () => {
     vi.mocked(evaluateGuidelineSemantics).mockResolvedValue({
       noAppearanceReference: true,
       metaphorIsWildlyAbsurd: true,
+      statisticIsClearlyFictional: true,
       noRealPublicFigureComparison: true,
       workplaceAppropriate: true,
       meaningfullyMoreDramatic: false,
@@ -179,6 +183,7 @@ describe("generateCompliantCompliment", () => {
     vi.mocked(evaluateGuidelineSemantics).mockResolvedValue({
       noAppearanceReference: true,
       metaphorIsWildlyAbsurd: true,
+      statisticIsClearlyFictional: true,
       noRealPublicFigureComparison: true,
       workplaceAppropriate: true,
       meaningfullyMoreDramatic: true,

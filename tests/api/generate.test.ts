@@ -1,6 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/generate/route";
 import { generateCompliantCompliment } from "@/lib/compliant-generation";
+import { evaluateDeckSemantics } from "@/lib/ai";
+
+vi.mock("@/lib/ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ai")>();
+  return {
+    ...actual,
+    evaluateDeckSemantics: vi.fn(async () => ({
+      genuinelyDifferent: true,
+      personaVoicesDistinct: true,
+      humorouslyVaried: true,
+      issues: [],
+    })),
+  };
+});
 
 vi.mock("@/lib/compliant-generation", async () => {
   const { COMPLIANT_GUIDELINES } = await import("@/tests/fixtures/guidelines");
@@ -55,6 +69,73 @@ describe("POST /api/generate", () => {
     expect(body.debug.requestId).toEqual(expect.any(String));
     expect(body.debug.events.some((event: { message: string }) => event.message === "selected personas")).toBe(true);
     expect(generateCompliantCompliment).toHaveBeenCalledTimes(3);
+    expect(evaluateDeckSemantics).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers one failed persona slot and still returns exactly three valid cards", async () => {
+    vi.mocked(generateCompliantCompliment)
+      .mockRejectedValueOnce(new Error("transient persona failure"));
+
+    const response = await POST(
+      new Request("http://localhost/api/generate", {
+        method: "POST",
+        body: JSON.stringify({ input: "Customer Success Manager" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(body.ok).toBe(true);
+    expect(body.cards).toHaveLength(3);
+    expect(body.cards.every((card: { status: string; text: string }) => card.status === "idle" && card.text)).toBe(true);
+    expect(generateCompliantCompliment).toHaveBeenCalledTimes(4);
+    expect(body.debug.events.some((event: { message: string }) => event.message === "persona slot recovery started")).toBe(true);
+  });
+
+  it("repairs the smallest offending subset when the deck audit finds semantic repetition", async () => {
+    vi.mocked(evaluateDeckSemantics).mockResolvedValueOnce({
+      genuinelyDifferent: false,
+      personaVoicesDistinct: true,
+      humorouslyVaried: false,
+      repairPersonaId: "unknown-persona",
+      issues: [{
+        category: "imagery-overlap",
+        personaIds: ["unknown-persona"],
+        reason: "Two cards use the same cosmic scale.",
+      }],
+    });
+
+    const response = await POST(
+      new Request("http://localhost/api/generate", {
+        method: "POST",
+        body: JSON.stringify({ input: "Customer Success Manager" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(body.ok).toBe(true);
+    expect(body.cards).toHaveLength(3);
+    expect(evaluateDeckSemantics).toHaveBeenCalledTimes(2);
+    expect(generateCompliantCompliment).toHaveBeenCalledTimes(4);
+    expect(body.debug.events.some((event: { message: string }) => event.message === "semantic deck repair started")).toBe(true);
+  });
+
+  it("keeps the complete deterministic deck when the optional semantic judge is unavailable", async () => {
+    vi.mocked(evaluateDeckSemantics).mockRejectedValueOnce(new Error("validator structured output unavailable"));
+
+    const response = await POST(
+      new Request("http://localhost/api/generate", {
+        method: "POST",
+        body: JSON.stringify({ input: "Customer Success Manager" }),
+      }),
+    );
+    const body = await response.json();
+
+    expect(body.ok).toBe(true);
+    expect(body.cards).toHaveLength(3);
+    expect(body.cards.every((card: { guidelines: { checks: Array<{ state: string }> } }) =>
+      card.guidelines.checks.length === 8 && card.guidelines.checks.every((check) => check.state === "pass"))).toBe(true);
+    expect(body.debug.events.some((event: { message: string }) =>
+      event.message === "deterministic diversity fallback accepted complete deck")).toBe(true);
   });
 
   it("preserves public-post delivery mode through every generated card", async () => {
@@ -122,9 +203,9 @@ describe("POST /api/generate", () => {
     expect(response.status).toBe(200);
     expect(body.ok).toBe(false);
     expect(body.error).toContain("quota");
-    expect(body.cards).toHaveLength(3);
-    expect(body.cards.every((card: { text: string }) => card.text === "")).toBe(true);
-    expect(generateCompliantCompliment).toHaveBeenCalledTimes(3);
+    expect(body.cards).toBeUndefined();
+    expect(body.diagnostics).toMatchObject({ expectedCardCount: 3, completedCardCount: 0 });
+    expect(generateCompliantCompliment).toHaveBeenCalledTimes(6);
     expect(body.debug.events.some((event: { message: string }) => event.message === "persona generation failed")).toBe(
       true,
     );
@@ -147,7 +228,7 @@ describe("POST /api/generate", () => {
 
     expect(body.ok).toBe(false);
     expect(body.error).toContain("Brand Team rule");
-    expect(body.cards.every((card: { text: string }) => card.text === "")).toBe(true);
-    expect(generateCompliantCompliment).toHaveBeenCalledTimes(3);
+    expect(body.cards).toBeUndefined();
+    expect(generateCompliantCompliment).toHaveBeenCalledTimes(6);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PERSONA_BUCKETS, pickOnePerBucket } from "@/lib/personas";
+import { fallbackPersonasFor, PERSONA_BUCKETS, pickOnePerBucket } from "@/lib/personas";
 
 describe("pickOnePerBucket", () => {
   it("returns exactly one persona from every bucket", () => {
@@ -15,5 +15,14 @@ describe("pickOnePerBucket", () => {
     const ids = new Set(personas.map((persona) => persona.id));
 
     expect(ids.size).toBe(3);
+  });
+
+  it("gives every persona an explicit, non-empty imagery lane and bounded same-bucket fallbacks", () => {
+    for (const persona of pickOnePerBucket(() => 0)) {
+      expect(persona.imageryDomain.length).toBeGreaterThan(20);
+      expect(persona.avoidImagery.length).toBeGreaterThan(20);
+      expect(fallbackPersonasFor(persona).every((fallback) => fallback.bucket === persona.bucket)).toBe(true);
+      expect(fallbackPersonasFor(persona).every((fallback) => fallback.id !== persona.id)).toBe(true);
+    }
   });
 });

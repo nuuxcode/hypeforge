@@ -38,7 +38,19 @@ export type SharedDeckResponse = {
 };
 
 export function isGenerateResponse(value: unknown): value is GenerateResponse {
-  return Boolean(value && typeof value === "object" && Array.isArray((value as GenerateResponse).cards));
+  if (!value || typeof value !== "object") return false;
+  const response = value as GenerateResponse;
+  return Boolean(
+    response.ok === true &&
+      Array.isArray(response.cards) &&
+      response.cards.length === 3 &&
+      response.cards.every((card) =>
+        card.status === "idle" &&
+        typeof card.text === "string" &&
+        card.text.trim().length > 0 &&
+        isGuidelineCompliance(card.guidelines),
+      ),
+  );
 }
 
 export function isGuidelineCompliance(value: unknown): value is GuidelineCompliance {
@@ -125,6 +137,9 @@ export function globalErrorMessage(body: unknown): string {
   }
   if (isApiErrorResponse(body) && /did not clear every Brand Team rule/i.test(body.error)) {
     return "One or more drafts missed a company rule, so they were not shown. Generate again for a fresh set.";
+  }
+  if (isApiErrorResponse(body) && /complete all three|three voices|three distinct|semantic variety/i.test(body.error)) {
+    return "HypeForge could not finish three clearly different voices. Nothing incomplete was saved. Try generating once more.";
   }
   return "The forge hiccuped. The compliment engine got overwhelmed by your brilliance. Try again.";
 }
@@ -246,6 +261,28 @@ export function apiFailureDiagnostic(args: {
     };
   }
 
+  if (responseDiagnostics?.expectedCardCount === 3 && responseDiagnostics.completedCardCount !== 3) {
+    return {
+      title: "The three-card deck could not be completed",
+      whatHappened: `HypeForge produced ${responseDiagnostics.completedCardCount ?? 0} of 3 required valid cards and rejected the incomplete deck.`,
+      why: responseDiagnostics.deckIssues?.join(" ") || responseError || "One persona slot still failed after bounded automatic recovery.",
+      howToFix: "Generate again. If this repeats, open the request in /admin and inspect the failed persona IDs, provider events, and rejected drafts.",
+      failedRuleLabels: ["Complete three-card deck"],
+      failedRuleIds: ["complete-deck"],
+    };
+  }
+
+  if (responseDiagnostics?.deckIssues?.length) {
+    return {
+      title: "The deck was not varied enough",
+      whatHappened: "All three drafts passed the company rules, but the deck-level audit found repeated concepts, imagery, persona voice, or humor style.",
+      why: responseDiagnostics.deckIssues.join(" "),
+      howToFix: "Generate again. For prompt tuning, inspect the deck audit and repair events for this request in /admin.",
+      failedRuleLabels: ["Semantic deck diversity"],
+      failedRuleIds: ["deck-semantic-diversity"],
+    };
+  }
+
   if (ruleHelp.length > 0 || /did not clear every Brand Team rule/i.test(responseError)) {
     return {
       title: "The AI draft was rejected by the company rules",
@@ -294,21 +331,6 @@ export function apiFailureDiagnostic(args: {
     failedRuleLabels: [],
     failedRuleIds: [inferDiagnosticKey(responseError)],
   };
-}
-
-function failedCardsIn(body: unknown): Array<{ persona: string; message: string }> {
-  if (!body || typeof body !== "object" || !("cards" in body)) return [];
-  const cards = (body as { cards?: unknown }).cards;
-  if (!Array.isArray(cards)) return [];
-  return cards.flatMap((card) => {
-    if (!card || typeof card !== "object") return [];
-    const value = card as { status?: unknown; text?: unknown; personaName?: unknown; personaId?: unknown; error?: unknown };
-    if (value.status !== "error" && (typeof value.text !== "string" || value.text.trim())) return [];
-    return [{
-      persona: typeof value.personaName === "string" ? value.personaName : typeof value.personaId === "string" ? value.personaId : "Unknown persona",
-      message: typeof value.error === "string" ? value.error : "The card did not produce a valid compliment.",
-    }];
-  });
 }
 
 function nestedErrorMessages(value: unknown, seen = new WeakSet<object>()): string[] {
@@ -385,7 +407,6 @@ export function logApiExchange(args: {
       const details = detailsRecord(event.details);
       return event.message === "guideline validation completed" && details?.accepted === false;
     }) ?? [];
-  const failedCards = failedCardsIn(args.body);
   const responseDiagnostics = args.body && typeof args.body === "object"
     ? (args.body as ApiErrorResponse).diagnostics
     : undefined;
@@ -395,12 +416,10 @@ export function logApiExchange(args: {
   const requestActionTitle = requestAction.charAt(0).toUpperCase() + requestAction.slice(1);
   const resultLabel = !args.ok
     ? "REJECTED"
-    : failedCards.length > 0
-      ? `COMPLETED WITH ${failedCards.length} CARD ERROR${failedCards.length === 1 ? "" : "S"}`
-      : providerFailures.length > 0
+    : providerFailures.length > 0
         ? "COMPLETED AFTER AUTOMATIC RECOVERY"
         : "SUCCEEDED";
-  const requestGroup = !args.ok || failedCards.length > 0 || providerFailures.length > 0
+  const requestGroup = !args.ok || providerFailures.length > 0
     ? console.group
     : console.groupCollapsed;
 
@@ -442,15 +461,7 @@ export function logApiExchange(args: {
     console.groupEnd();
   }
 
-  if (args.ok && failedCards.length > 0) {
-    console.group(`[HypeForge Help] The deck finished, but ${failedCards.length} card${failedCards.length === 1 ? " was" : "s were"} unavailable`);
-    console.warn("What happened:", `The API returned normally, but ${failedCards.length} persona pipeline${failedCards.length === 1 ? "" : "s"} did not produce a compliment that passed every company rule.`);
-    for (const card of failedCards) console.error(`${card.persona}:`, card.message);
-    console.info("What still worked:", "Every other valid card is safe to use. The unavailable card can be retried by itself.");
-    console.info("How to investigate:", "Open /admin for the rejected model output, failed rules, Gemini errors, key rotation, and full server timeline.");
-    console.info("Request reference:", { requestId, endpoint: args.endpoint, status: statusLabel, elapsedMs });
-    console.groupEnd();
-  } else if (args.ok && providerFailures.length > 0) {
+  if (args.ok && providerFailures.length > 0) {
     console.group(`[HypeForge Help] Gemini stumbled, then HypeForge recovered automatically`);
     console.warn("What happened:", `${providerFailures.length} provider stage${providerFailures.length === 1 ? "" : "s"} failed during this request, but a later attempt produced the visible result.`);
     console.info("What you need to do:", "Nothing for this request. Open /admin if this repeats and you want to inspect the provider messages and rejected drafts.");

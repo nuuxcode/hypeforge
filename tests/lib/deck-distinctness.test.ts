@@ -60,4 +60,19 @@ describe("deck distinctness", () => {
       ),
     ).toBe(true);
   });
+
+  it("does not confuse the shared required role prefix with a repeated creative opening", () => {
+    const prior = withEvidence(
+      "As a Customer Success Manager, you steer 91% of client storms into a harbor made of applause.",
+      "a harbor made of applause",
+      "91% of client storms",
+    );
+    const candidate = withEvidence(
+      "As a Customer Success Manager, you juggle 84 moon-sized inboxes while a brass band files the tickets.",
+      "juggle moon-sized inboxes",
+      "84 moon-sized inboxes",
+    );
+
+    expect(distinctnessIssues(candidate, [prior])).not.toContain("repeated opening");
+  });
 });

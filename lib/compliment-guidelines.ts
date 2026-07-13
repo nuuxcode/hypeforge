@@ -159,6 +159,8 @@ const UNSAFE_WORKPLACE_PATTERN =
   /\b(?:fuck|shit|bitch|bastard|sexy|naked|nude|kill|murder|slaughter|racial slur|idiot|moron|worthless)\b/i;
 const STATISTIC_PATTERN =
   /(?:\b(?:top\s+)?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*%|\s+percent\b)|#\s*\d+|\b\d+\s+(?:out of|in)\s+\d+\b|\b(?:ranked?|rating|score)\s+\d+|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:thousand|million|billion|trillion|quadrillion|quintillion|sextillion)\b|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+(?:galax(?:y|ies)|stars?|planets?|planetary\s+alignments?|nebulae?|universes?|dimensions?|timelines?|realities|asteroids?|comets?|moons?|suns?|black\s+holes?|impossible\s+requests?)\b|\b(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s+[a-z][a-z-]*(?:\s+[a-z][a-z-]*){0,2}\b)/i;
+const PLAUSIBLE_KPI_PATTERN =
+  /\b\d{1,3}(?:\.\d+)?\s*(?:%|percent)\s+(?:customer\s+satisfaction|efficiency|accuracy|uptime|conversion|retention|revenue|growth|productivity|success\s+rate|response\s+rate|resolution\s+rate|on-time\s+delivery)\b/i;
 
 function normalize(value: string): string {
   return value.replace(/\s+/g, " ").trim().toLocaleLowerCase();
@@ -234,6 +236,9 @@ export function verifyGuidelineOutput(
   const resolvedStatisticEvidence = statisticEvidence(text, raw.evidence.madeUpStatistic);
   const statisticEvidencePresent = containsQuote(text, resolvedStatisticEvidence);
   const statisticLooksValid = STATISTIC_PATTERN.test(resolvedStatisticEvidence);
+  const plausibleKpiMatch = text.match(PLAUSIBLE_KPI_PATTERN)?.[0];
+  const statisticFictionalityJudged = semantic?.statisticIsClearlyFictional !== undefined;
+  const statisticClearlyFictional = !plausibleKpiMatch && semantic?.statisticIsClearlyFictional !== false;
   const appearanceMatch = text.match(APPEARANCE_PATTERN)?.[0];
   const publicFigureMatch = text.match(EXPLICIT_PUBLIC_FIGURE_PATTERN)?.[0];
   const workplaceMatch = text.match(UNSAFE_WORKPLACE_PATTERN)?.[0];
@@ -284,11 +289,26 @@ export function verifyGuidelineOutput(
     }),
     check({
       id: "made-up-statistic",
-      source: statisticLooksValid ? "evidence" : "heuristic",
+      source: !statisticLooksValid || plausibleKpiMatch
+        ? "heuristic"
+        : statisticFictionalityJudged
+          ? "model"
+          : "evidence",
       state:
-        claimed.has("made-up-statistic") && statisticEvidencePresent && statisticLooksValid ? "pass" : "fail",
-      evidence: resolvedStatisticEvidence,
-      note: statisticLooksValid ? "Fictional numeric statistic detected" : "No statistic pattern detected",
+        claimed.has("made-up-statistic") &&
+        statisticEvidencePresent &&
+        statisticLooksValid &&
+        statisticClearlyFictional
+          ? "pass"
+          : "fail",
+      evidence: plausibleKpiMatch ?? resolvedStatisticEvidence,
+      note: !statisticLooksValid
+        ? "No statistic pattern detected"
+        : plausibleKpiMatch
+          ? "The number reads like a plausible workplace KPI, not an obviously invented statistic"
+          : statisticFictionalityJudged
+            ? "Exact numeric evidence + independent fictionality audit"
+            : "Exact numeric evidence + plausible-KPI guard",
     }),
     check({
       id: "max-40-words",

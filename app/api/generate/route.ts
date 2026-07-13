@@ -1,104 +1,13 @@
 import { providerErrorMessage } from "@/lib/ai";
 import { rateLimitCookie, rateLimitHeaders, readRateLimit } from "@/lib/api-rate-limit";
+import { isGuidelineComplianceError } from "@/lib/compliant-generation";
 import {
-  generateCompliantCompliment,
-  isGuidelineComplianceError,
-} from "@/lib/compliant-generation";
+  generateCompleteDeck,
+  isCompleteDeckError,
+  underlyingDeckFailure,
+} from "@/lib/deck-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
-import { distinctnessIssues } from "@/lib/deck-distinctness";
-import { pickOnePerBucket } from "@/lib/personas";
-import { buildInitialMessages } from "@/lib/prompts";
-import type { ComplimentCard, ComplimentSubject, DeliveryMode, Persona } from "@/lib/types";
 import { cleanPreferenceContext, GenerateBodySchema, resolveSubject } from "@/lib/validate";
-import type { SoftPreferenceContext } from "@/lib/types";
-
-async function generateForPersona(
-  persona: Persona,
-  subject: ComplimentSubject,
-  preference: SoftPreferenceContext,
-  debug: ReturnType<typeof createApiDebug>,
-  avoidCompliments: string[] = [],
-): Promise<Pick<ComplimentCard, "text" | "guidelines">> {
-  const messages = buildInitialMessages(persona, subject, preference, avoidCompliments);
-  debug.providerInfo("persona generation started", {
-    personaId: persona.id,
-    personaName: persona.name,
-  });
-  try {
-    const result = await generateCompliantCompliment({
-      messages,
-      subject: subject.jobFunction,
-      personaId: persona.id,
-      operation: "generate",
-      deliveryMode: subject.deliveryMode,
-      debug,
-      temperature: 1,
-      maxOutputTokens: 260,
-    });
-    debug.providerInfo("persona generation succeeded", {
-      personaId: persona.id,
-      personaName: persona.name,
-      characterCount: result.text.length,
-      wordCount: result.guidelines.wordCount,
-    });
-    return result;
-  } catch (error) {
-    debug.providerError("persona generation failed", {
-      personaId: persona.id,
-      personaName: persona.name,
-      error,
-    });
-    throw error;
-  }
-}
-
-function makeCard(
-  persona: Persona,
-  subject: { jobFunction: string; personDetails?: string; displayInput: string },
-  deliveryMode: DeliveryMode,
-  result: Pick<ComplimentCard, "text" | "guidelines">,
-): ComplimentCard {
-  return {
-    id: crypto.randomUUID(),
-    originalInput: subject.displayInput,
-    jobFunction: subject.jobFunction,
-    personDetails: subject.personDetails,
-    deliveryMode,
-    personaId: persona.id,
-    personaName: persona.name,
-    text: result.text,
-    history: [result.text],
-    guidelines: result.guidelines,
-    dramaLevel: 1,
-    status: "idle",
-    copied: false,
-  };
-}
-
-function makeFailedCard(
-  persona: Persona,
-  subject: { jobFunction: string; personDetails?: string; displayInput: string },
-  deliveryMode: DeliveryMode,
-  error: unknown,
-): ComplimentCard {
-  return {
-    id: crypto.randomUUID(),
-    originalInput: subject.displayInput,
-    jobFunction: subject.jobFunction,
-    personDetails: subject.personDetails,
-    deliveryMode,
-    personaId: persona.id,
-    personaName: persona.name,
-    text: "",
-    history: [],
-    dramaLevel: 1,
-    status: "error",
-    copied: false,
-    error: isGuidelineComplianceError(error)
-      ? error.message
-      : "The compliment engine got overwhelmed by your brilliance. Try again.",
-  };
-}
 
 export async function POST(req: Request) {
   const debug = createApiDebug("POST /api/generate");
@@ -166,94 +75,63 @@ export async function POST(req: Request) {
     personDetailsLength: subject.personDetails?.length ?? 0,
   });
 
-  const selected = pickOnePerBucket();
-  debug.info("selected personas", selected.map((persona) => ({
-    personaId: persona.id,
-    personaName: persona.name,
-    bucket: persona.bucket,
-  })));
-
-  const settled = await Promise.allSettled(
-    selected.map(async (persona) =>
-      makeCard(
-        persona,
-        subject,
-        body.data.deliveryMode,
-        await generateForPersona(persona, { ...subject, deliveryMode: body.data.deliveryMode }, preference, debug),
-      ),
-    ),
-  );
-
-  const cards = settled.map((result, index) =>
-    result.status === "fulfilled"
-      ? result.value
-      : makeFailedCard(selected[index]!, subject, body.data.deliveryMode, result.reason),
-  );
-
-  for (let index = 0; index < cards.length; index += 1) {
-    const card = cards[index]!;
-    if (card.status === "error") continue;
-    const accepted = cards.slice(0, index).filter((item) => item.status !== "error" && item.text);
-    const issues = distinctnessIssues(card, accepted);
-    if (issues.length === 0) continue;
-
-    debug.warn("deck distinctness repair started", { personaId: card.personaId, issues });
-    try {
-      const replacement = makeCard(
-        selected[index]!,
-        subject,
-        body.data.deliveryMode,
-        await generateForPersona(
-          selected[index]!,
-          { ...subject, deliveryMode: body.data.deliveryMode },
-          preference,
-          debug,
-          accepted.map((item) => item.text),
-        ),
+  let cards: Awaited<ReturnType<typeof generateCompleteDeck>>;
+  try {
+    cards = await generateCompleteDeck({
+      subject,
+      deliveryMode: body.data.deliveryMode,
+      preference,
+      debug,
+    });
+  } catch (error) {
+    if (!isCompleteDeckError(error)) {
+      debug.error("unexpected complete deck failure", error);
+      return Response.json(
+        withDebug({ ok: false, error: providerErrorMessage(error) }, debug.finish()),
+        { headers: { "Set-Cookie": setCookie } },
       );
-      const remainingIssues = distinctnessIssues(replacement, accepted);
-      cards[index] = remainingIssues.length === 0
-        ? replacement
-        : makeFailedCard(
-            selected[index]!,
-            subject,
-            body.data.deliveryMode,
-            new Error(`Distinctness failed: ${remainingIssues.join(", ")}`),
-          );
-    } catch (error) {
-      cards[index] = makeFailedCard(selected[index]!, subject, body.data.deliveryMode, error);
     }
-  }
-  debug.info("persona settlement complete", {
-    successCount: cards.filter((card) => card.status === "idle").length,
-    errorCount: cards.filter((card) => card.status === "error").length,
-  });
 
-  if (cards.every((card) => card.status === "error")) {
-    const firstError = settled[0]?.status === "rejected" ? settled[0].reason : undefined;
-    const diagnostics = isGuidelineComplianceError(firstError)
-      ? { attemptCount: firstError.attemptCount, failedRuleIds: firstError.failedRuleIds, failureDetails: firstError.failureDetails }
-      : undefined;
-    debug.error("all personas failed", settled.map((result, index) => ({
-      personaId: selected[index]?.id,
-      reason: result.status === "rejected" ? result.reason : undefined,
-    })));
+    const underlying = underlyingDeckFailure(error);
+    const guidelineFailure = isGuidelineComplianceError(underlying) ? underlying : undefined;
+    const providerMessage = providerErrorMessage(underlying);
+    const userMessage = guidelineFailure
+      ? guidelineFailure.message
+      : providerMessage.includes("overwhelmed by your brilliance")
+        ? error.message
+        : providerMessage;
+    const qualityFailureIds = error.completedCardCount < 3
+      ? ["complete-deck"]
+      : error.deckIssues.length > 0
+        ? ["deck-semantic-diversity"]
+        : [];
+    const diagnostics = {
+      attemptCount: guidelineFailure?.attemptCount,
+      failedRuleIds: guidelineFailure?.failedRuleIds?.length
+        ? guidelineFailure.failedRuleIds
+        : qualityFailureIds,
+      failureDetails: guidelineFailure?.failureDetails,
+      expectedCardCount: 3,
+      completedCardCount: error.completedCardCount,
+      failedPersonaIds: error.failedPersonaIds,
+      deckIssues: error.deckIssues,
+    };
+    debug.error("complete deck generation failed", {
+      message: error.message,
+      diagnostics,
+      underlying,
+    });
     return Response.json(
-      withDebug(
-        {
-          ok: false,
-          error:
-            isGuidelineComplianceError(firstError)
-              ? firstError.message
-              : providerErrorMessage(firstError),
-          cards,
-          diagnostics,
-        },
-        debug.finish(),
-      ),
+      withDebug({ ok: false, error: userMessage, diagnostics }, debug.finish()),
       { headers: { "Set-Cookie": setCookie } },
     );
   }
+
+  debug.info("complete deck contract passed", {
+    expectedCardCount: 3,
+    completedCardCount: cards.length,
+    personaIds: cards.map((card) => card.personaId),
+  });
 
   return Response.json(
     withDebug({ ok: true, cards }, debug.finish()),

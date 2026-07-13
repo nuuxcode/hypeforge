@@ -80,6 +80,10 @@ export type Persona = {
   name: string;
   voice: string;
   bucket: PersonaBucket;
+  // A persona owns a rhetorical and imagery lane so a deck cannot collapse
+  // into three differently worded versions of the same cosmic metaphor.
+  imageryDomain: string;
+  avoidImagery: string;
   // One guideline-compliant compliment in this persona's voice, used as a
   // few-shot anchor. Written for a person who never appears in real input.
   example: string;
@@ -128,7 +132,7 @@ export type ApiDebug = {
 };
 
 export type GenerateResponse = {
-  ok?: true;
+  ok: true;
   cards: ComplimentCard[];
   debug?: ApiDebug;
 };
@@ -160,6 +164,10 @@ export type ApiErrorResponse = {
     attemptCount?: number;
     failedRuleIds?: string[];
     failureDetails?: PipelineFailureDetail[];
+    expectedCardCount?: number;
+    completedCardCount?: number;
+    failedPersonaIds?: string[];
+    deckIssues?: string[];
   };
   debug?: ApiDebug;
 };

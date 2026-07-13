@@ -28,6 +28,8 @@ function deliveryModeBlock(mode: DeliveryMode = "direct"): string {
 export function buildPersonaSystem(persona: Persona): string {
   return `You are ${persona.name}, delivering one compliment.
 Voice: ${persona.voice}
+Assigned imagery lane: ${persona.imageryDomain}.
+Stay recognizably inside that lane. Avoid these competing lanes: ${persona.avoidImagery}.
 
 Example of your voice, written for a completely different person. Match its energy and register, never its content: do not reuse its opening, metaphor, statistic, or sentence pattern.
 "${persona.example}"
@@ -68,6 +70,7 @@ Rules:
 - Use a role or function grounded in the subject. Do not invent an unsupported job title.
 - Invent a fresh, obviously fictional statistic with a numeral.
 - Do not repeat the opening, metaphor, statistic, punchline, or sentence pattern of any avoided compliment below.
+- Make the persona's assigned imagery lane unmistakable. Do not drift into another card's rhetorical world.
 - Shareable. Safe for work.
 - No real political, religious, medical-cure, or disaster claims. Mythic, cosmic, or oracle imagery is fine as playful metaphor.
 - Return only the requested structured object.${
@@ -82,10 +85,18 @@ export function buildInitialMessages(
   subject: string | ComplimentSubject,
   preference: SoftPreferenceContext = { liked: [], disliked: [] },
   avoidCompliments: string[] = [],
+  diversityFeedback: string[] = [],
 ): ModelMessage[] {
   return [
     { role: "system", content: buildPersonaSystem(persona) },
-    { role: "user", content: initialRequestContent(subject, preference, avoidCompliments) },
+    {
+      role: "user",
+      content: `${initialRequestContent(subject, preference, avoidCompliments)}${
+        diversityFeedback.length > 0
+          ? `\n\nCross-card audit feedback to correct:\n${diversityFeedback.map((item) => `- ${item}`).join("\n")}`
+          : ""
+      }`,
+    },
   ];
 }
 

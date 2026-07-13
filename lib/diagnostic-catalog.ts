@@ -81,12 +81,13 @@ export const DIAGNOSTIC_CATALOG: readonly DiagnosticEntry[] = [
     category: "Company guideline",
     summary: "The compliment must include an obviously fictional statistic written with a numeral. The validator could not find a supported numeric phrase in the draft and evidence.",
     decision: "Reject the draft and request an explicit fictional number.",
-    validator: "Deterministic TypeScript pattern matching and exact evidence verification",
+    validator: "Deterministic TypeScript pattern matching, exact evidence verification, and an independent Gemini fictionality audit",
     stage: GUIDELINE_PIPELINE,
     likelyCauses: ["The statistic was written only in words.", "The number did not match a supported statistic form.", "evidence.madeUpStatistic did not quote the draft exactly."],
     fixes: ["Use an explicit form such as 97 percent of lunar spreadsheets.", "Compare the evidence field with the complete model draft.", "Add a narrowly scoped pattern and regression test for a valid new format."],
     locations: [
       { label: "Statistic parser", path: "lib/compliment-guidelines.ts", purpose: "Supported numeric forms and exact evidence" },
+      { label: "AI semantic judge", path: "lib/ai.ts", purpose: "Rejects plausible real metrics that are not clearly invented" },
       { label: "Targeted repair", path: "lib/compliant-generation.ts", purpose: "Explicit statistic repair instruction" },
       { label: "Regression tests", path: "tests/lib/compliment-guidelines.test.ts", purpose: "Accepted and rejected statistic formats" },
     ],
@@ -183,6 +184,39 @@ export const DIAGNOSTIC_CATALOG: readonly DiagnosticEntry[] = [
     locations: [
       { label: "Delivery validator", path: "lib/compliant-generation.ts", purpose: "Direct/public pronoun gate" },
       { label: "Delivery prompts", path: "lib/prompts.ts", purpose: "Point-of-view instructions" },
+    ],
+  },
+  {
+    key: "complete-deck",
+    title: "All three required cards were not completed",
+    category: "Quality gate",
+    summary: "The request requires exactly three valid compliments. At least one persona slot still failed after its normal rule-repair loop and one bounded same-bucket recovery.",
+    decision: "Reject the deck as one atomic result. Never label a one-card or two-card response as successful and never save it to user history.",
+    validator: "Deterministic TypeScript response contract",
+    stage: "Deck orchestration, after parallel persona generation",
+    likelyCauses: ["A persona exhausted its company-rule repair attempts.", "Gemini failed for both the selected persona and its fallback.", "A provider or structured-output error persisted through recovery."],
+    fixes: ["Inspect failedPersonaIds and the provider timeline for the request.", "Use the rejected candidate and failed-rule evidence to add a prompt regression.", "Change retry limits only after measuring failure frequency and cost."],
+    locations: [
+      { label: "Atomic deck orchestrator", path: "lib/deck-generation.ts", purpose: "Persona-slot recovery and exact three-card contract" },
+      { label: "HTTP boundary", path: "app/api/generate/route.ts", purpose: "Returns app-level failure without partial cards" },
+      { label: "Production smoke test", path: "scripts/verify-api-no-http-errors.mjs", purpose: "Requires three valid cards" },
+    ],
+  },
+  {
+    key: "deck-semantic-diversity",
+    title: "Compliment deck was not semantically varied",
+    category: "Quality gate",
+    summary: "The three cards may use different words while repeating the same central imagery, persona voice, opening style, or joke mechanism.",
+    decision: "Rewrite the smallest offending subset, re-audit the full deck, and reject the deck if bounded repairs still do not produce three genuinely distinct voices.",
+    validator: "Lexical TypeScript checks plus one consolidated temperature-0 Gemini deck audit",
+    stage: "Cross-card quality gate, after all three cards pass Company Guidelines v2.1",
+    likelyCauses: ["Several personas drifted into the same cosmic or ceremonial imagery.", "The outputs changed nouns but kept the same joke structure.", "A persona ignored its assigned rhetorical lane.", "The semantic judge may be conservative."],
+    fixes: ["Compare the issue category, named persona IDs, and reason in the deck-audit event.", "Improve only the offending persona lane or repair instruction.", "Add the rejected three-card set to the quality-evaluation corpus before tuning the judge."],
+    locations: [
+      { label: "Persona lanes", path: "lib/personas.ts", purpose: "Exclusive imagery and rhetorical domains" },
+      { label: "Deck audit prompt", path: "lib/ai.ts", purpose: "Cross-card semantic evaluation" },
+      { label: "Deck repair loop", path: "lib/deck-generation.ts", purpose: "Minimal targeted regeneration and bounded re-audit" },
+      { label: "Lexical checks", path: "lib/deck-distinctness.ts", purpose: "Duplicate wording, opening, metaphor, and statistic checks" },
     ],
   },
   {
@@ -319,6 +353,8 @@ export function diagnosticReferenceHref(key: string): string {
 }
 
 export function inferDiagnosticKey(message: string): string {
+  if (/complete all three|incomplete deck|three required cards/i.test(message)) return "complete-deck";
+  if (/deck.*(?:semantic|distinct|varied)|three voices/i.test(message)) return "deck-semantic-diversity";
   if (/429|quota|resource_exhausted|rate.?limit/i.test(message)) return "quota";
   if (/401|403|api.?key|credential|unauthori[sz]ed|permission denied/i.test(message)) return "credentials";
   if (/timeout|timed out|aborted|aborterror/i.test(message)) return "timeout";

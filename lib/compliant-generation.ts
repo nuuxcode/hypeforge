@@ -47,7 +47,7 @@ function buildFailureDetails(args: {
   const semanticReason = args.semanticNotes?.join(" ");
   const details: PipelineFailureDetail[] = args.failures.map((failure) => {
     const fragment = includesFragment(args.candidate.text, failure.evidence) ? failure.evidence : undefined;
-    const semanticJudgment = failure.source === "model" && !fragment;
+    const semanticJudgment = failure.source === "model";
     return {
       ruleId: failure.id,
       label: failure.label,
@@ -126,7 +126,7 @@ function repairInstruction(args: {
     .join("\n");
   const targetedHints = [
     failedRuleIds.includes("made-up-statistic")
-      ? '- For made-up-statistic: include a numeral using the exact format "97 percent of ...", then copy that exact phrase into evidence.madeUpStatistic.'
+      ? '- For made-up-statistic: include a numeral using the exact format "97 percent of ..." in an obviously impossible context, then copy that exact phrase into evidence.madeUpStatistic. It must read as a joke, never as a plausible KPI.'
       : undefined,
     failedRuleIds.includes("job-function")
       ? "- For job-function: repeat the supplied title or workplace function verbatim, then quote it exactly in evidence.functionReference."

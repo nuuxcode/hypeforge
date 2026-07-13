@@ -1,25 +1,21 @@
 "use client";
 
-import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  AlertTriangle,
-  BookOpen,
-  History,
-  Moon,
-  RotateCcw,
-  Settings2,
-  Share2,
-  Sparkles,
-  Sun,
-} from "lucide-react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 import { ComplimentGuideDialog } from "@/components/compliment-guide-dialog";
 import { DeckHistoryDrawer } from "@/components/deck-history-drawer";
+import { HypeForgeHeader, type ThemeMode } from "@/components/hypeforge-header";
+import { LoadingDeckPreview } from "@/components/loading-deck-preview";
 import { SettingsDialog } from "@/components/settings-dialog";
-import { Tooltip } from "@/components/tooltip";
 import { V2InputPanel } from "@/components/v2-input-panel";
 import { V2ComplimentCard } from "@/components/v2-compliment-card";
-import { fetchEscalationWithProgress, fetchWithTimeout } from "@/lib/client-fetch";
+import { useComplimentSpeech } from "@/hooks/use-compliment-speech";
+import {
+  fetchEscalationWithProgress,
+  fetchWithTimeout,
+  GENERATION_REQUEST_TIMEOUT_MS,
+} from "@/lib/client-fetch";
 import { isAtDramaCap } from "@/lib/drama";
 import { playForgeSound } from "@/lib/forge-sound";
 import { copyTextToClipboard } from "@/lib/clipboard";
@@ -50,7 +46,6 @@ import type {
   DeliveryMode,
   EscalationProgress,
   FeedbackVote,
-  PersonaBucket,
 } from "@/lib/types";
 import { MAX_HISTORY_ITEMS, MAX_INPUT_LENGTH, MIN_INPUT_LENGTH } from "@/lib/validate";
 import { appendCardVersion, createCardVersion, hydrateCard, hydrateCards } from "@/lib/card-versions";
@@ -69,51 +64,11 @@ import {
   logApiExchange,
 } from "@/lib/api-responses";
 
-const BUCKET_ACCENT: Record<PersonaBucket, string> = {
-  grand: "#7050c8",
-  mythic: "#168a87",
-  chaotic: "#ff6b5f",
-};
-
 function preferredScrollBehavior(): ScrollBehavior {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 }
 
 type CardVersionPanel = Record<string, boolean>;
-
-type ThemeMode = "light" | "dark";
-
-function LoadingPreview() {
-  return (
-    <div className="v2-forge-preview" aria-label="Forging three compliment voices" role="status">
-      <div className="grid items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {["grand", "mythic", "chaotic"].map((bucket, index) => (
-          <div
-            className="v2-card v2-forge-card min-h-[260px] p-5"
-            key={bucket}
-            style={
-              {
-                "--bucket-accent": BUCKET_ACCENT[bucket as PersonaBucket],
-                "--heat": 0,
-                "--forge-delay": `${index * 140}ms`,
-              } as CSSProperties
-            }
-          >
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-xs font-semibold capitalize" style={{ color: BUCKET_ACCENT[bucket as PersonaBucket] }}>{bucket}</p>
-              <div className="h-8 w-24 rounded-full bg-[var(--muted-fill-strong)]" />
-            </div>
-            <div className="mt-12 space-y-4">
-              <div className="h-5 rounded-full bg-[var(--muted-fill-strong)]" />
-              <div className="h-5 w-11/12 rounded-full bg-[var(--muted-fill-strong)]" />
-              <div className="h-5 w-8/12 rounded-full bg-[var(--muted-fill-strong)]" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export default function V2Page() {
   const [theme, setTheme] = useState<ThemeMode>("light");
@@ -132,13 +87,11 @@ export default function V2Page() {
   const [versionPanels, setVersionPanels] = useState<CardVersionPanel>({});
   const [tweakCardId, setTweakCardId] = useState<string | null>(null);
   const [shareCardId, setShareCardId] = useState<string | null>(null);
-  const [speakingCardId, setSpeakingCardId] = useState<string | null>(null);
   const [tweakDrafts, setTweakDrafts] = useState<Record<string, string>>({});
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [pendingCardActions, setPendingCardActions] = useState<Record<string, CardPendingAction | undefined>>({});
   const [escalationProgress, setEscalationProgress] = useState<Record<string, EscalationProgress | undefined>>({});
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const speechRequest = useRef(0);
   const wasGenerating = useRef(false);
 
   const trimmedInput = input.trim();
@@ -159,52 +112,7 @@ export default function V2Page() {
     return () => Object.values(timers).forEach((timer) => clearTimeout(timer));
   }, []);
 
-  const stopSpeech = useCallback(() => {
-    speechRequest.current += 1;
-    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
-    setSpeakingCardId(null);
-  }, []);
-
-  const toggleSpeech = useCallback((cardId: string, text: string) => {
-    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
-      setShareMessage("Read aloud is not supported in this browser.");
-      return;
-    }
-
-    const wasSpeaking = speakingCardId === cardId;
-    speechRequest.current += 1;
-    const request = speechRequest.current;
-    window.speechSynthesis.cancel();
-    if (wasSpeaking) {
-      setSpeakingCardId(null);
-      return;
-    }
-
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "en-US";
-    utterance.rate = 0.92;
-    utterance.pitch = 1.04;
-    const preferredVoice = window.speechSynthesis
-      .getVoices()
-      .find((voice) => voice.lang.toLowerCase().startsWith("en") && voice.localService);
-    if (preferredVoice) utterance.voice = preferredVoice;
-    utterance.onend = () => {
-      if (speechRequest.current === request) setSpeakingCardId(null);
-    };
-    utterance.onerror = (event) => {
-      if (speechRequest.current !== request || event.error === "canceled" || event.error === "interrupted") return;
-      console.error("[HypeForge read aloud] Speech synthesis failed", event.error);
-      setSpeakingCardId(null);
-      setShareMessage("This device could not read the compliment aloud.");
-    };
-    setSpeakingCardId(cardId);
-    window.speechSynthesis.speak(utterance);
-  }, [speakingCardId]);
-
-  useEffect(() => () => {
-    speechRequest.current += 1;
-    if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-  }, []);
+  const { speakingCardId, stopSpeech, toggleSpeech } = useComplimentSpeech(setShareMessage);
 
   useEffect(() => {
     if (wasGenerating.current && !isGenerating && cards.some((card) => card.text.trim())) {
@@ -377,17 +285,21 @@ export default function V2Page() {
     };
     const startedAt = performance.now();
     try {
-      const response = await fetchWithTimeout("/api/generate", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetchWithTimeout(
+        "/api/generate",
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        GENERATION_REQUEST_TIMEOUT_MS,
+      );
       const body = (await response.json().catch(() => ({}))) as unknown;
       logApiExchange({
         endpoint: "POST /api/generate",
         payload,
         status: response.status,
-        ok: response.ok && !isApiErrorResponse(body),
+        ok: response.ok && isGenerateResponse(body),
         body,
         startedAt,
       });
@@ -839,74 +751,15 @@ export default function V2Page() {
 
   return (
     <main className={`v2-shell flex min-h-dvh flex-col ${theme === "dark" ? "v2-dark" : "v2-light"}`}>
-      <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--chrome-bg)] backdrop-blur-xl">
-        <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <div className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[var(--accent-soft)]">
-              <Sparkles aria-hidden="true" className="size-4 text-[var(--accent)]" />
-            </div>
-            <p className="v2-display text-lg font-semibold text-[var(--text)]">HypeForge</p>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Tooltip align="end" className="hidden min-[380px]:inline-flex" label="Compliment guide">
-              <button
-                aria-label="Open compliment guide"
-                className="v2-header-button"
-                type="button"
-                onClick={() => setGuideOpen(true)}
-              >
-                <BookOpen aria-hidden="true" className="size-4" />
-              </button>
-            </Tooltip>
-            <Tooltip align="end" label="Saved compliment decks">
-              <button
-                aria-label="Open saved compliment decks"
-                className="v2-header-button"
-                type="button"
-                onClick={() => setHistoryOpen(true)}
-              >
-                <History aria-hidden="true" className="size-4" />
-              </button>
-            </Tooltip>
-            {cards.some((card) => card.text.trim()) ? (
-              <Tooltip align="end" label="Create a share link">
-                <button
-                  aria-label="Share this compliment deck"
-                  className="v2-header-button"
-                  type="button"
-                  onClick={shareDeck}
-                >
-                  <Share2 aria-hidden="true" className="size-4" />
-                </button>
-              </Tooltip>
-            ) : null}
-            <Tooltip align="end" label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}>
-              <button
-                aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
-                className="v2-header-button"
-                type="button"
-                onClick={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
-              >
-                {theme === "light" ? (
-                  <Moon aria-hidden="true" className="size-4" />
-                ) : (
-                  <Sun aria-hidden="true" className="size-4" />
-                )}
-              </button>
-            </Tooltip>
-            <Tooltip align="end" label="Open settings">
-              <button
-                aria-label="Open settings"
-                className="v2-header-button"
-                type="button"
-                onClick={() => setSettingsOpen(true)}
-              >
-                <Settings2 aria-hidden="true" className="size-4" />
-              </button>
-            </Tooltip>
-          </div>
-        </div>
-      </header>
+      <HypeForgeHeader
+        canShare={cards.some((card) => card.text.trim().length > 0)}
+        theme={theme}
+        onOpenGuide={() => setGuideOpen(true)}
+        onOpenHistory={() => setHistoryOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onShare={shareDeck}
+        onToggleTheme={() => setTheme((current) => (current === "light" ? "dark" : "light"))}
+      />
 
       <section
         className={
@@ -986,7 +839,7 @@ export default function V2Page() {
             </div>
           ) : null}
 
-          {isGenerating && cards.length === 0 ? <LoadingPreview /> : null}
+          {isGenerating && cards.length === 0 ? <LoadingDeckPreview /> : null}
 
           {cards.length > 0 ? (
             <div className="v2-card-grid grid items-stretch gap-4">

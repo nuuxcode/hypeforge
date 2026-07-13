@@ -43,7 +43,10 @@ function evidence(card: DistinctCompliment, id: string): string {
 export function distinctnessIssues(candidate: DistinctCompliment, accepted: DistinctCompliment[]): string[] {
   const issues = new Set<string>();
   const candidateText = normalize(candidate.text);
-  const candidateOpening = candidateText.split(" ").slice(0, 5).join(" ");
+  // The first few words often must repeat the required role (for example,
+  // "As a Customer Success Manager..."). Include enough words to reach the
+  // creative framing before treating two openings as duplicates.
+  const candidateOpening = candidateText.split(" ").slice(0, 8).join(" ");
   const candidateMetaphor = evidence(candidate, "absurd-metaphor");
   const candidateStatistic = normalize(evidence(candidate, "made-up-statistic"));
 
@@ -51,7 +54,7 @@ export function distinctnessIssues(candidate: DistinctCompliment, accepted: Dist
     const priorText = normalize(prior.text);
     if (candidateText === priorText) issues.add("exact duplicate text");
     if (jaccard(candidate.text, prior.text) >= 0.72) issues.add("near-duplicate wording");
-    if (candidateOpening && candidateOpening === priorText.split(" ").slice(0, 5).join(" ")) {
+    if (candidateOpening && candidateOpening === priorText.split(" ").slice(0, 8).join(" ")) {
       issues.add("repeated opening");
     }
     const priorMetaphor = evidence(prior, "absurd-metaphor");

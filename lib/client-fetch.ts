@@ -1,6 +1,7 @@
 import type { EscalationProgress, EscalationStreamEvent } from "./types";
 
 export const CLIENT_REQUEST_TIMEOUT_MS = 35_000;
+export const GENERATION_REQUEST_TIMEOUT_MS = 60_000;
 export const ESCALATION_STREAM_TIMEOUT_MS = 90_000;
 
 export async function fetchWithTimeout(

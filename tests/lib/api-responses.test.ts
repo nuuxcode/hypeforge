@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { apiFailureDiagnostic, cardErrorMessage, globalErrorMessage, logApiExchange } from "@/lib/api-responses";
+import {
+  apiFailureDiagnostic,
+  cardErrorMessage,
+  globalErrorMessage,
+  isGenerateResponse,
+  logApiExchange,
+} from "@/lib/api-responses";
 
 const guidelineFailure = {
   ok: false as const,
@@ -118,40 +124,11 @@ describe("plain-language API diagnostics", () => {
     table.mockRestore();
   });
 
-  it("does not call a partial deck a success and explains the unavailable persona", () => {
-    const group = vi.spyOn(console, "group").mockImplementation(() => undefined);
-    const groupCollapsed = vi.spyOn(console, "groupCollapsed").mockImplementation(() => undefined);
-    const groupEnd = vi.spyOn(console, "groupEnd").mockImplementation(() => undefined);
-    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
-    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    const table = vi.spyOn(console, "table").mockImplementation(() => undefined);
-
-    logApiExchange({
-      endpoint: "POST /api/generate",
-      payload: { jobFunction: "Customer Success Manager" },
-      status: 200,
+  it("rejects partial or unverified generate responses at the client boundary", () => {
+    expect(isGenerateResponse({ ok: true, cards: [] })).toBe(false);
+    expect(isGenerateResponse({
       ok: true,
-      body: {
-        cards: [{ personaName: "Grand", text: "", status: "error", error: "Rule checks failed." }],
-        debug: guidelineFailure.debug,
-      },
-      startedAt: performance.now(),
-    });
-
-    expect(group).toHaveBeenCalledWith(expect.stringContaining("COMPLETED WITH 1 CARD ERROR"));
-    expect(group).toHaveBeenCalledWith("[HypeForge Help] The deck finished, but 1 card was unavailable");
-    expect(error).toHaveBeenCalledWith("Grand:", "Rule checks failed.");
-    expect(info).toHaveBeenCalledWith("How to investigate:", expect.stringContaining("/admin"));
-
-    group.mockRestore();
-    groupCollapsed.mockRestore();
-    groupEnd.mockRestore();
-    error.mockRestore();
-    info.mockRestore();
-    log.mockRestore();
-    warn.mockRestore();
-    table.mockRestore();
+      cards: [{ personaName: "Grand", text: "", status: "error" }],
+    })).toBe(false);
   });
 });

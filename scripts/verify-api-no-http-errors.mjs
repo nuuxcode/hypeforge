@@ -15,6 +15,16 @@ const result = {
   error: body?.error,
   requestId: body?.debug?.requestId,
   eventCount: body?.debug?.events?.length,
+  cardCount: Array.isArray(body?.cards) ? body.cards.length : 0,
+  validCardCount: Array.isArray(body?.cards)
+    ? body.cards.filter((card) =>
+        card?.status === "idle" &&
+        typeof card?.text === "string" &&
+        card.text.trim() &&
+        card?.guidelines?.checks?.length === 8 &&
+        card.guidelines.checks.every((check) => check?.state === "pass"),
+      ).length
+    : 0,
 };
 
 console.log(JSON.stringify(result, null, 2));
@@ -27,6 +37,19 @@ if (!body || typeof body !== "object") {
   throw new Error("Expected JSON response body.");
 }
 
-if (body.ok === false && !body.debug?.events?.some((event) => event.level === "error")) {
-  throw new Error("Expected app-level failure to include debug error events.");
+if (body.ok !== true) {
+  throw new Error(`Expected a successful app response, got: ${body.error ?? "unknown app failure"}.`);
+}
+
+if (!Array.isArray(body.cards) || body.cards.length !== 3) {
+  throw new Error(`Expected exactly 3 cards, got ${Array.isArray(body.cards) ? body.cards.length : 0}.`);
+}
+
+for (const [index, card] of body.cards.entries()) {
+  const passed = card?.status === "idle" &&
+    typeof card?.text === "string" &&
+    card.text.trim().length > 0 &&
+    card?.guidelines?.checks?.length === 8 &&
+    card.guidelines.checks.every((check) => check?.state === "pass");
+  if (!passed) throw new Error(`Card ${index + 1} did not satisfy the complete-deck contract.`);
 }

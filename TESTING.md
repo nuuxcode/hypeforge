@@ -10,6 +10,7 @@ pnpm test:a11y
 pnpm test:browsers
 pnpm build
 pnpm verify:api
+pnpm eval:quality
 gitleaks git . --redact --no-banner
 ```
 
@@ -17,7 +18,17 @@ gitleaks git . --redact --no-banner
 - `test:a11y` runs axe WCAG A/AA checks against light and dark desktop states, the mobile generator, the guide dialog, the public guide, and both admin authentication and diagnostics when `HYPEFORGE_ADMIN_CODE` is configured.
 - `test:browsers` checks 375px and 1440px layouts in Chrome/Chromium, Firefox, and Safari/WebKit, including required input, dialog keyboard closing, console errors, and horizontal overflow.
 - `verify:api` makes a real local Gemini generation request and fails if HTTP or application-level success is false.
+- `eval:quality` runs a 36-case role/detail/mode corpus through the real API and fails on incomplete decks, missing voice buckets, any non-passing company check, duplicate openings, or weak lexical separation. `HYPEFORGE_EVAL_START` and `HYPEFORGE_EVAL_LIMIT` support cheap targeted replays.
 - Gitleaks scans the complete Git history. `.gitleaks.toml` narrowly excludes only the documented fake rate-limit fixture and local-storage key constants.
+
+## Current hardening baseline (2026-07-13)
+
+- Vitest: 22 files, 108 tests passing.
+- Production build, ESLint, and TypeScript: passing.
+- Axe: 6 light/dark/mobile/dialog/admin surfaces passing.
+- Cross-browser: Chromium, Firefox, and WebKit at 375px and 1440px passing.
+- Strict real API verifier: HTTP success, application success, exactly 3 cards, and 3 valid `8/8` cards.
+- Real quality smoke: first 3 corpus cases passed 3/3 after replaying the live-discovered opening-fingerprint edge case. The full 36-case corpus remains available for pre-release prompt/model evaluation.
 
 ## Browser acceptance completed locally
 

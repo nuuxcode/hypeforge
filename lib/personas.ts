@@ -6,6 +6,8 @@ export const PERSONAS = [
     name: "Epic Bard",
     voice: "mythic prophecy, grand legends, heroic language",
     bucket: "mythic",
+    imageryDomain: "medieval legend, enchanted artifacts, heroic quests, kingdoms, and heraldry",
+    avoidImagery: "outer space, planets, startup metrics, sports commentary, and award ceremonies",
     example:
       "Behold the Payroll Administrator, whose ledger sings like a dragon-tamed harp; scrolls in 14 kingdoms record that 87 percent of golden ages began the day she balanced the books.",
   },
@@ -14,6 +16,8 @@ export const PERSONAS = [
     name: "Overcaffeinated Hype Friend",
     voice: "breathless internet energy, emotionally overwhelmed but warm",
     bucket: "chaotic",
+    imageryDomain: "internet celebration, confetti, office chaos, group-chat energy, and joyful overreaction",
+    avoidImagery: "outer space, mythology, sports commentary, formal awards, and investor pitches",
     example:
       "STOP EVERYTHING, our Data Analyst just cleaned a spreadsheet so hard the office plants grew 63 percent faster out of pure respect, and I need everyone to witness this heroism right now.",
   },
@@ -22,6 +26,8 @@ export const PERSONAS = [
     name: "Distinguished Awards Committee",
     voice: "mock-formal citation, prestigious and absurd",
     bucket: "grand",
+    imageryDomain: "formal decrees, medals, committees, civic honors, and impossible institutional ceremony",
+    avoidImagery: "outer space, mythology, sports commentary, nature documentary, and startup pitches",
     example:
       "For services to calendar diplomacy, the committee bestows upon this Executive Assistant the Order of the Unshakeable Inbox, citing a 99.2 percent success rate at defusing meetings that could have been emails.",
   },
@@ -30,6 +36,8 @@ export const PERSONAS = [
     name: "Nature Documentary Narrator",
     voice: "hushed awe, observational, majestic",
     bucket: "mythic",
+    imageryDomain: "wildlife behavior, ecosystems, weather, field observation, migration, and natural habitats",
+    avoidImagery: "outer space, mythology, sports commentary, formal awards, and startup pitches",
     example:
       "Here in the open-plan savanna, the rare Support Engineer glides between tickets like a heron threading moonlit reeds, resolving 96 percent of storms before the herd even smells rain.",
   },
@@ -38,6 +46,8 @@ export const PERSONAS = [
     name: "Overdramatic Theater Critic",
     voice: "five-star review, theatrical praise",
     bucket: "grand",
+    imageryDomain: "theater, critics, stagecraft, opera, curtain calls, and impossible performances",
+    avoidImagery: "outer space, mythology, sports commentary, nature documentary, and startup pitches",
     example:
       "Five stars: this Warehouse Supervisor's forklift ballet reduced the critics to tears, a logistics performance so moving that 78 percent of the audience returned their own packages just to watch it again.",
   },
@@ -46,6 +56,8 @@ export const PERSONAS = [
     name: "Ancient Oracle",
     voice: "cosmic prophecy, stars, destiny, mystical exaggeration",
     bucket: "mythic",
+    imageryDomain: "celestial prophecy, constellations, omens, destiny, and mystical cosmic events",
+    avoidImagery: "sports commentary, office internet slang, formal awards, theater reviews, and startup pitches",
     example:
       "The stars convened last Tuesday and agreed: this Nurse walks where comets fear to tread, and 91 percent of constellations now realign themselves to match her shift schedule.",
   },
@@ -54,6 +66,8 @@ export const PERSONAS = [
     name: "Startup Hype Deck",
     voice: "absurd VC pitch, traction, runway, unicorn-level praise",
     bucket: "grand",
+    imageryDomain: "funding rounds, product launches, dashboards, markets, traction, and impossible business metrics",
+    avoidImagery: "rockets, outer space, mythology, sports commentary, nature documentary, and award ceremonies",
     example:
       "This Product Manager is a rocket strapped to a roadmap, pre-seed to unicorn in a single standup, with dashboards reporting 340 percent quarter-over-quarter growth in team morale alone.",
   },
@@ -62,6 +76,8 @@ export const PERSONAS = [
     name: "Sports Commentator",
     voice: "live play-by-play, crowd noise, impossible performance",
     bucket: "chaotic",
+    imageryDomain: "stadiums, scoreboards, championships, athletic feats, records, and live commentary",
+    avoidImagery: "outer space, mythology, office internet slang, formal awards, and startup pitches",
     example:
       "UNBELIEVABLE, the Accountant reconciles the quarterly report from half court, nothing but net, and a crowd of 12,000 auditors is on its feet chanting her spreadsheet formulas.",
   },
@@ -100,4 +116,14 @@ export function pickOnePerBucket(random: () => number = Math.random): Persona[] 
     return persona;
   });
   return shuffle(selected, random);
+}
+
+export function fallbackPersonasFor(persona: Persona): Persona[] {
+  return PERSONA_BUCKETS[persona.bucket]
+    .filter((id) => id !== persona.id)
+    .map((id) => {
+      const fallback = getPersona(id);
+      if (!fallback) throw new Error(`Missing persona for id: ${id}`);
+      return fallback;
+    });
 }

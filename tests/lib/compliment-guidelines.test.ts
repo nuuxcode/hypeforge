@@ -94,6 +94,7 @@ describe("Company Compliment Guidelines v2.1", () => {
     const semantic = verifyGuidelineOutput(COMPLIANT_MODEL_OUTPUT, "Customer Success Manager", {
       noAppearanceReference: true,
       metaphorIsWildlyAbsurd: true,
+      statisticIsClearlyFictional: true,
       noRealPublicFigureComparison: false,
       workplaceAppropriate: true,
       meaningfullyMoreDramatic: true,
@@ -116,6 +117,41 @@ describe("Company Compliment Guidelines v2.1", () => {
     const statistic = verified.guidelines.checks.find((check) => check.id === "made-up-statistic");
     expect(statistic?.state).toBe("pass");
     expect(statistic?.evidence).toBe("99.7%");
+  });
+
+  it("rejects a plausible real metric when the independent audit says it is not clearly made up", () => {
+    const verified = verifyGuidelineOutput(COMPLIANT_MODEL_OUTPUT, "Customer Success Manager", {
+      noAppearanceReference: true,
+      metaphorIsWildlyAbsurd: true,
+      statisticIsClearlyFictional: false,
+      noRealPublicFigureComparison: true,
+      workplaceAppropriate: true,
+      meaningfullyMoreDramatic: true,
+      notes: ["The number reads like a plausible business KPI rather than an invented joke."],
+    });
+
+    expect(verified.guidelines.checks.find((check) => check.id === "made-up-statistic")).toMatchObject({
+      state: "fail",
+      source: "model",
+    });
+  });
+
+  it("rejects plausible KPI wording even when the optional AI opinion is absent", () => {
+    const text = COMPLIANT_TEXT.replace("99.7% of impossible requests", "97% customer satisfaction");
+    const verified = verifyGuidelineOutput(
+      {
+        ...COMPLIANT_MODEL_OUTPUT,
+        text,
+        evidence: { ...COMPLIANT_MODEL_OUTPUT.evidence, madeUpStatistic: "97% customer satisfaction" },
+      },
+      "Customer Success Manager",
+    );
+
+    expect(verified.guidelines.checks.find((check) => check.id === "made-up-statistic")).toMatchObject({
+      state: "fail",
+      source: "heuristic",
+      evidence: "97% customer satisfaction",
+    });
   });
 
   it("accepts a fully grounded compliant compliment", () => {
@@ -175,6 +211,7 @@ describe("Company Compliment Guidelines v2.1", () => {
     const unsafe = verifyGuidelineOutput(COMPLIANT_MODEL_OUTPUT, "Customer Success Manager", {
       noAppearanceReference: false,
       metaphorIsWildlyAbsurd: false,
+      statisticIsClearlyFictional: true,
       noRealPublicFigureComparison: false,
       workplaceAppropriate: false,
       meaningfullyMoreDramatic: true,

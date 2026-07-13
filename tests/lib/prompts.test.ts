@@ -13,6 +13,8 @@ describe("prompts", () => {
     });
 
     expect(messages[0]?.content).toContain("Epic Bard");
+    expect(messages[0]?.content).toContain("Assigned imagery lane");
+    expect(messages[0]?.content).toContain("medieval legend");
     expect(messages[0]?.content).toContain("Company Compliment Style Guidelines");
     expect(messages[0]?.content).toContain("Never reference physical appearance");
     expect(messages[1]?.content).toContain("Founding Engineer");
@@ -47,6 +49,20 @@ describe("prompts", () => {
     );
     expect(messages[1]?.content).toContain("<avoid_compliments>");
     expect(messages[1]?.content).toContain("Do not repeat the opening, metaphor, statistic, punchline");
+  });
+
+  it("passes deck-audit repair feedback without weakening the company rules", () => {
+    const messages = buildInitialMessages(
+      persona!,
+      { jobFunction: "Teacher" },
+      { liked: [], disliked: [] },
+      ["Teacher, you make 92 percent of planets applaud algebra."],
+      ["Switch away from cosmic imagery and use the assigned medieval lane."],
+    );
+
+    expect(messages[1]?.content).toContain("Cross-card audit feedback to correct");
+    expect(messages[1]?.content).toContain("Switch away from cosmic imagery");
+    expect(messages[1]?.content).toContain("Hard maximum: 40 words");
   });
 
   it("uses feedback as a soft, non-copying taste signal", () => {

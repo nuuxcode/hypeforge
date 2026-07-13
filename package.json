@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:a11y": "node scripts/a11y-check.mjs",
     "test:browsers": "node scripts/cross-browser-check.mjs",
+    "eval:quality": "node scripts/run-quality-eval.mjs",
     "typecheck": "tsc --noEmit",
     "verify:api": "node scripts/verify-api-no-http-errors.mjs"
   },
