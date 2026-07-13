@@ -11,6 +11,8 @@ import { SettingsDialog } from "@/components/settings-dialog";
 import { V2InputPanel } from "@/components/v2-input-panel";
 import { V2ComplimentCard } from "@/components/v2-compliment-card";
 import { useComplimentSpeech } from "@/hooks/use-compliment-speech";
+import { useCommittedState } from "@/hooks/use-committed-state";
+import { useCardCompletionPulses } from "@/hooks/use-card-completion-pulses";
 import {
   fetchEscalationWithProgress,
   fetchWithTimeout,
@@ -75,7 +77,7 @@ export default function V2Page() {
   const [input, setInput] = useState("");
   const [personDetails, setPersonDetails] = useState("");
   const [deliveryMode, setDeliveryMode] = useState<DeliveryMode>("direct");
-  const [cards, setCards] = useState<ComplimentCardType[]>([]);
+  const [cards, setCards] = useCommittedState<ComplimentCardType[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [deckHistory, setDeckHistory] = useState<DeckHistoryEntry[]>([]);
@@ -93,6 +95,7 @@ export default function V2Page() {
   const [escalationProgress, setEscalationProgress] = useState<Record<string, EscalationProgress | undefined>>({});
   const copyTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const wasGenerating = useRef(false);
+  const { pulses: cardCompletionPulses, announce: announceCardCompletion, clear: clearCardCompletion } = useCardCompletionPulses();
 
   const trimmedInput = input.trim();
   const trimmedDetails = personDetails.trim();
@@ -221,7 +224,7 @@ export default function V2Page() {
     }, 0);
 
     return () => window.clearTimeout(restoreTimer);
-  }, []);
+  }, [setCards]);
 
   const persistDeck = useCallback(
     (nextCards: ComplimentCardType[], preferredId?: string) => {
@@ -248,13 +251,13 @@ export default function V2Page() {
 
   const setCardCopied = useCallback((cardId: string, copied: boolean) => {
     setCards((current) => current.map((card) => (card.id === cardId ? { ...card, copied } : card)));
-  }, []);
+  }, [setCards]);
 
   const setCardError = useCallback((cardId: string, message: string) => {
     setCards((current) =>
       current.map((card) => (card.id === cardId ? { ...card, status: "error", error: message } : card)),
     );
-  }, []);
+  }, [setCards]);
 
   const focusDeck = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -336,7 +339,7 @@ export default function V2Page() {
     } finally {
       setIsGenerating(false);
     }
-  }, [deliveryMode, focusDeck, isGenerating, persistDeck, tasteContext, trimmedDetails, trimmedInput]);
+  }, [deliveryMode, focusDeck, isGenerating, persistDeck, setCards, tasteContext, trimmedDetails, trimmedInput]);
 
   const escalate = useCallback(
     async (cardId: string) => {
@@ -346,6 +349,7 @@ export default function V2Page() {
       setCards((current) =>
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
+      clearCardCompletion(cardId);
       setPendingCardActions((current) => ({ ...current, [cardId]: "escalate" }));
       setEscalationProgress((current) => ({
         ...current,
@@ -399,7 +403,7 @@ export default function V2Page() {
           return;
         }
 
-        const nextCards = cards.map((item) => {
+        const nextCards = setCards((current) => current.map((item) => {
           if (item.id !== cardId) return item;
           const version = createCardVersion(body.text, body.dramaLevel, "dramatic", body.guidelines);
           return {
@@ -414,9 +418,10 @@ export default function V2Page() {
             error: undefined,
             copied: false,
           };
-        });
-        setCards(nextCards);
+        }));
         persistDeck(nextCards);
+        announceCardCompletion(cardId, "escalate", body.dramaLevel);
+        playForgeSound("level-up", body.dramaLevel);
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/escalate", payload, startedAt, error });
         setCardError(cardId, cardErrorMessage(undefined, "escalate"));
@@ -425,7 +430,7 @@ export default function V2Page() {
         setEscalationProgress((current) => ({ ...current, [cardId]: undefined }));
       }
     },
-    [cards, persistDeck, setCardError],
+    [announceCardCompletion, cards, clearCardCompletion, persistDeck, setCardError, setCards],
   );
 
   const retryCard = useCallback(
@@ -436,6 +441,7 @@ export default function V2Page() {
       setCards((current) =>
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
+      clearCardCompletion(cardId);
       setPendingCardActions((current) => ({ ...current, [cardId]: "retry" }));
 
       const payload = {
@@ -467,7 +473,7 @@ export default function V2Page() {
           return;
         }
 
-        const nextCards = cards.map((item) => {
+        const nextCards = setCards((current) => current.map((item) => {
           if (item.id !== cardId) return item;
           const version = createCardVersion(body.text, body.dramaLevel, "generated", body.guidelines);
           return {
@@ -482,9 +488,10 @@ export default function V2Page() {
             error: undefined,
             copied: false,
           };
-        });
-        setCards(nextCards);
+        }));
         persistDeck(nextCards);
+        announceCardCompletion(cardId, "retry", body.dramaLevel);
+        playForgeSound("complete", body.dramaLevel);
       } catch (error) {
         logApiExchange({ endpoint: "POST /api/retry", payload, startedAt, error });
         setCardError(cardId, cardErrorMessage(undefined, "retry"));
@@ -492,7 +499,7 @@ export default function V2Page() {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
     },
-    [cards, persistDeck, setCardError],
+    [announceCardCompletion, cards, clearCardCompletion, persistDeck, setCardError, setCards],
   );
 
   const tweakCard = useCallback(
@@ -504,6 +511,7 @@ export default function V2Page() {
       setCards((current) =>
         current.map((item) => (item.id === cardId ? { ...item, status: "loading", error: undefined } : item)),
       );
+      clearCardCompletion(cardId);
       setPendingCardActions((current) => ({ ...current, [cardId]: "tweak" }));
 
       const payload = {
@@ -539,7 +547,7 @@ export default function V2Page() {
           return;
         }
 
-        const nextCards = cards.map((item) => {
+        const nextCards = setCards((current) => current.map((item) => {
           if (item.id !== cardId) return item;
           const version = createCardVersion(body.text, body.dramaLevel, "tweaked", body.guidelines);
           return {
@@ -554,9 +562,10 @@ export default function V2Page() {
             error: undefined,
             copied: false,
           };
-        });
-        setCards(nextCards);
+        }));
         persistDeck(nextCards);
+        announceCardCompletion(cardId, "tweak", body.dramaLevel);
+        playForgeSound("complete", body.dramaLevel);
         setTweakCardId(null);
         setTweakDrafts((current) => ({ ...current, [cardId]: "" }));
       } catch (error) {
@@ -566,7 +575,7 @@ export default function V2Page() {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
     },
-    [cards, persistDeck, setCardError, tweakDrafts],
+    [announceCardCompletion, cards, clearCardCompletion, persistDeck, setCardError, setCards, tweakDrafts],
   );
 
   const setCardFeedback = useCallback(
@@ -574,8 +583,9 @@ export default function V2Page() {
       const card = cards.find((item) => item.id === cardId);
       if (!card || !card.text) return;
       const nextVote = nextFeedbackVote(card.feedback, vote);
-      const nextCards = cards.map((item) => (item.id === cardId ? { ...item, feedback: nextVote } : item));
-      setCards(nextCards);
+      const nextCards = setCards((current) =>
+        current.map((item) => (item.id === cardId ? { ...item, feedback: nextVote } : item)),
+      );
       const deckId = persistDeck(nextCards);
       const signalId = `${deckId}:${cardId}`;
 
@@ -596,12 +606,12 @@ export default function V2Page() {
         }),
       );
     },
-    [cards, persistDeck],
+    [cards, persistDeck, setCards],
   );
 
   const restoreCardVersion = useCallback(
     (cardId: string, version: ComplimentCardVersion) => {
-      const nextCards = cards.map((item) =>
+      const nextCards = setCards((current) => current.map((item) =>
         item.id === cardId
           ? {
               ...item,
@@ -615,11 +625,10 @@ export default function V2Page() {
               copied: false,
             }
           : item,
-      );
-      setCards(nextCards);
+      ));
       persistDeck(nextCards);
     },
-    [cards, persistDeck],
+    [persistDeck, setCards],
   );
 
   const restoreDeck = useCallback((entry: DeckHistoryEntry) => {
@@ -632,7 +641,7 @@ export default function V2Page() {
     setGlobalError(null);
     setHistoryOpen(false);
     window.scrollTo({ top: 0, behavior: preferredScrollBehavior() });
-  }, []);
+  }, [setCards]);
 
   const shareDeck = useCallback(async () => {
     const shareableCards = cards.filter((card) => card.text.trim());
@@ -705,10 +714,9 @@ export default function V2Page() {
     clearTasteSignals();
     setTasteSignals([]);
     if (cards.length === 0) return;
-    const nextCards = cards.map((card) => ({ ...card, feedback: undefined }));
-    setCards(nextCards);
+    const nextCards = setCards((current) => current.map((card) => ({ ...card, feedback: undefined })));
     persistDeck(nextCards);
-  }, [cards, persistDeck]);
+  }, [cards, persistDeck, setCards]);
 
   const copyText = useCallback(
     async (cardId: string, text: string) => {
@@ -878,6 +886,7 @@ export default function V2Page() {
                   tweakValue={tweakDrafts[card.id] ?? ""}
                   pendingAction={pendingCardActions[card.id]}
                   escalationProgress={escalationProgress[card.id]}
+                  completionPulse={cardCompletionPulses[card.id]}
                   onToggleTweak={(cardId) => {
                     setVersionPanels({});
                     setShareCardId(null);

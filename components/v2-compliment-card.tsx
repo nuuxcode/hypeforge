@@ -33,6 +33,7 @@ import {
 import { GuidelineProof } from "@/components/guideline-proof";
 import { Tooltip } from "@/components/tooltip";
 import { activeVersionIdFor, versionsForCard } from "@/lib/card-versions";
+import type { CardCompletionPulse } from "@/hooks/use-card-completion-pulses";
 import { DRAMA_CAP, DRAMA_STAGES, dramaButtonLabel, dramaStage, isAtDramaCap } from "@/lib/drama";
 import { playForgeSound } from "@/lib/forge-sound";
 import { PERSONAS } from "@/lib/personas";
@@ -86,6 +87,7 @@ export function V2ComplimentCard({
   tweakValue,
   pendingAction,
   escalationProgress,
+  completionPulse,
   onToggleTweak,
   onToggleShare,
   onToggleSpeech,
@@ -107,6 +109,7 @@ export function V2ComplimentCard({
   tweakValue: string;
   pendingAction?: CardPendingAction;
   escalationProgress?: EscalationProgress;
+  completionPulse?: CardCompletionPulse;
   onToggleTweak: (cardId: string) => void;
   onToggleShare: (cardId: string) => void;
   onToggleSpeech: (cardId: string, text: string) => void;
@@ -127,10 +130,8 @@ export function V2ComplimentCard({
   const showAutomaticRepair = Boolean(
     escalationProgress && (escalationProgress.phase === "repairing" || escalationProgress.attempt > 1),
   );
-  const [powerUpComplete, setPowerUpComplete] = useState(false);
-  const [levelUpNotice, setLevelUpNotice] = useState(false);
-  const wasLoading = useRef(isLoading);
-  const lastPendingAction = useRef<CardPendingAction | undefined>(pendingAction);
+  const powerUpComplete = completionPulse !== undefined;
+  const levelUpNotice = completionPulse?.action === "escalate";
   const shareStatusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [shareStatus, setShareStatus] = useState<string | null>(null);
   const shareData: ComplimentShareData = {
@@ -177,27 +178,6 @@ export function V2ComplimentCard({
       announceShareStatus("The PNG card could not be created.");
     }
   };
-
-  useEffect(() => {
-    if (pendingAction) lastPendingAction.current = pendingAction;
-  }, [pendingAction]);
-
-  useEffect(() => {
-    if (wasLoading.current && !isLoading && card.status === "idle" && hasText) {
-      const completedAction = lastPendingAction.current;
-      setPowerUpComplete(true);
-      setLevelUpNotice(completedAction === "escalate");
-      playForgeSound(completedAction === "escalate" ? "level-up" : "complete", card.dramaLevel);
-      const timer = window.setTimeout(() => {
-        setPowerUpComplete(false);
-        setLevelUpNotice(false);
-      }, 2_000);
-      lastPendingAction.current = undefined;
-      wasLoading.current = isLoading;
-      return () => window.clearTimeout(timer);
-    }
-    wasLoading.current = isLoading;
-  }, [card.dramaLevel, card.status, hasText, isLoading]);
 
   useEffect(() => () => {
     if (shareStatusTimer.current) clearTimeout(shareStatusTimer.current);
@@ -391,7 +371,7 @@ export function V2ComplimentCard({
                   : `Make ${card.personaName} compliment more dramatic`
               }
               className={`v2-secondary-button v2-drama-button relative inline-flex min-h-11 items-center justify-center gap-2 px-3 py-2 text-sm font-semibold disabled:cursor-not-allowed ${levelUpNotice ? "v2-drama-unlocked" : atDramaCap ? "v2-drama-max" : "disabled:opacity-50"}`}
-              disabled={isLoading || levelUpNotice || atDramaCap}
+              disabled={isLoading || atDramaCap}
               type="button"
               onClick={() => {
                 playForgeSound("charge");

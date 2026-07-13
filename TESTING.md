@@ -23,7 +23,7 @@ gitleaks git . --redact --no-banner
 
 ## Current hardening baseline (2026-07-13)
 
-- Vitest: 22 files, 108 tests passing.
+- Vitest: 24 files, 111 tests passing, including out-of-order card completion and interrupted success-timer regressions.
 - Production build, ESLint, and TypeScript: passing.
 - Axe: 6 light/dark/mobile/dialog/admin surfaces passing.
 - Cross-browser: Chromium, Firefox, and WebKit at 375px and 1440px passing.
