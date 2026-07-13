@@ -8,6 +8,11 @@ import type {
   TweakResponse,
 } from "@/lib/types";
 import type { SharedDeckSnapshot } from "@/lib/deck-history";
+import {
+  diagnosticReferenceHref,
+  getDiagnosticEntry,
+  inferDiagnosticKey,
+} from "@/lib/diagnostic-catalog";
 
 export const CLIENT_DEBUG = process.env.NODE_ENV !== "production";
 
@@ -136,7 +141,7 @@ export function cardErrorMessage(body: unknown, operation: CardOperation = "retr
     if (operation === "escalate" && failedIds.length === 1 && failedIds[0] === "dramatic-escalation") {
       return "All 3 rewrites passed the company rules but were not clearly more dramatic, so we kept this version. Try again or tweak the direction.";
     }
-    const failedLabels = failedIds.map((id) => RULE_HELP[id]?.label ?? id);
+    const failedLabels = failedIds.map((id) => getDiagnosticEntry(id).title);
     if (operation === "escalate") {
       return failedLabels.length > 0
         ? `All 3 rewrites were rejected (${failedLabels.join(", ")}), so we kept this valid compliment. Try increasing the drama again.`
@@ -155,19 +160,6 @@ export function cardErrorMessage(body: unknown, operation: CardOperation = "retr
   }
   return "This persona could not finish a new draft. Retry this card.";
 }
-
-const RULE_HELP: Record<string, { label: string; explanation: string }> = {
-  "no-appearance": { label: "No appearance references", explanation: "The draft may have described physical appearance." },
-  "job-function": { label: "Job or function reference", explanation: "The draft did not clearly name the person's role or function." },
-  "absurd-metaphor": { label: "Absurd metaphor", explanation: "The comparison was missing or not wildly absurd enough." },
-  "made-up-statistic": { label: "Made-up statistic", explanation: "The draft lacked a clearly formatted fictional number, such as “97 percent of ...”." },
-  "max-40-words": { label: "40-word maximum", explanation: "The draft was longer than 40 words." },
-  "no-literally": { label: "Banned word", explanation: "The draft used the banned word “literally”." },
-  "no-public-figure": { label: "No public-figure comparison", explanation: "The draft may have compared the person to a real public figure." },
-  "workplace-appropriate": { label: "Workplace appropriate", explanation: "The independent safety audit did not clearly approve the wording." },
-  "dramatic-escalation": { label: "Meaningfully more dramatic", explanation: "The rewrite passed the company rules but was not clearly more dramatic than the current version." },
-  "delivery-mode": { label: "Correct delivery point of view", explanation: "The draft used direct-address wording for a public post, or failed to address the recipient in a direct message." },
-};
 
 function detailsRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" ? value as Record<string, unknown> : undefined;
@@ -205,6 +197,7 @@ export function apiFailureDiagnostic(args: {
   howToFix: string;
   existingContentSafe?: string;
   failedRuleLabels: string[];
+  failedRuleIds: string[];
 } {
   const debug = getDebug(args.body);
   const responseDiagnostics = args.body && typeof args.body === "object"
@@ -213,7 +206,7 @@ export function apiFailureDiagnostic(args: {
   const ruleIds = responseDiagnostics?.failedRuleIds?.length
     ? responseDiagnostics.failedRuleIds
     : failedRules(debug);
-  const ruleHelp = ruleIds.map((id) => RULE_HELP[id]).filter((item): item is { label: string; explanation: string } => Boolean(item));
+  const ruleHelp = ruleIds.map(getDiagnosticEntry);
   const responseError = isApiErrorResponse(args.body) ? args.body.error : "";
   const action = actionLabel(args.endpoint);
 
@@ -225,6 +218,7 @@ export function apiFailureDiagnostic(args: {
       howToFix: "Check that the local server is running and your connection is online, then try the action again.",
       existingContentSafe: args.endpoint.includes("/generate") ? undefined : "Your existing compliment was not changed.",
       failedRuleLabels: [],
+      failedRuleIds: ["network"],
     };
   }
 
@@ -236,6 +230,7 @@ export function apiFailureDiagnostic(args: {
       howToFix: "Wait for the Gemini quota window to reset or configure a key with available quota, then try again.",
       existingContentSafe: args.endpoint.includes("/generate") ? undefined : "Your existing compliment was not changed.",
       failedRuleLabels: [],
+      failedRuleIds: ["quota"],
     };
   }
 
@@ -247,6 +242,7 @@ export function apiFailureDiagnostic(args: {
       howToFix: "Try once more. If it repeats, check the network and Gemini service status.",
       existingContentSafe: args.endpoint.includes("/generate") ? undefined : "Your existing compliment was not changed.",
       failedRuleLabels: [],
+      failedRuleIds: ["timeout"],
     };
   }
 
@@ -255,13 +251,14 @@ export function apiFailureDiagnostic(args: {
       title: "The AI draft was rejected by the company rules",
       whatHappened: `Gemini wrote a draft, but HypeForge refused to ${action} because the draft did not pass all 8 required checks.`,
       why: ruleHelp.length > 0
-        ? ruleHelp.map((item) => `${item.label}: ${item.explanation}`).join(" ")
+        ? ruleHelp.map((item) => `${item.title}: ${item.summary}`).join(" ")
         : "The draft still missed at least one required guideline after automatic repair attempts.",
       howToFix: args.endpoint.includes("/escalate")
         ? "Click the drama button again. If it repeats, restore the prior version or use Tweak with a short note such as “keep the statistic explicit”."
         : "Try the action again. HypeForge will ask Gemini for a fresh draft.",
       existingContentSafe: args.endpoint.includes("/generate") ? undefined : "Your existing valid compliment was preserved unchanged.",
-      failedRuleLabels: ruleHelp.map((item) => item.label),
+      failedRuleLabels: ruleHelp.map((item) => item.title),
+      failedRuleIds: ruleIds,
     };
   }
 
@@ -273,6 +270,7 @@ export function apiFailureDiagnostic(args: {
       howToFix: "Wait a moment, then try again.",
       existingContentSafe: args.endpoint.includes("/generate") ? undefined : "Your existing compliment was not changed.",
       failedRuleLabels: [],
+      failedRuleIds: ["rate-limit"],
     };
   }
 
@@ -283,6 +281,7 @@ export function apiFailureDiagnostic(args: {
       why: responseError,
       howToFix: "Add their role or what they do, for example: “Sara, Customer Success Manager” or “Sara, who keeps every client calm”.",
       failedRuleLabels: ["Job or function reference"],
+      failedRuleIds: ["job-function"],
     };
   }
 
@@ -293,6 +292,7 @@ export function apiFailureDiagnostic(args: {
     howToFix: "Try the action again. Use the request reference below if the problem repeats.",
     existingContentSafe: args.endpoint.includes("/generate") ? undefined : "Your existing compliment was not changed.",
     failedRuleLabels: [],
+    failedRuleIds: [inferDiagnosticKey(responseError)],
   };
 }
 
@@ -326,7 +326,9 @@ function providerEventExplanation(event: ApiDebug["events"][number]): string {
   const details = detailsRecord(event.details);
   const messages = nestedErrorMessages(details?.error ?? event.details);
   if (/failed closed/i.test(event.message)) {
-    const rules = Array.isArray(details?.failedRuleIds) ? details.failedRuleIds.join(", ") : "one or more company rules";
+    const rules = Array.isArray(details?.failedRuleIds)
+      ? details.failedRuleIds.map((id) => getDiagnosticEntry(String(id)).title).join(", ")
+      : "one or more company rules";
     return `All automatic drafts were rejected. Final failed checks: ${rules}.`;
   }
   if (/persona generation failed/i.test(event.message)) {
@@ -336,6 +338,28 @@ function providerEventExplanation(event: ApiDebug["events"][number]): string {
     return `Gemini failed before HypeForge received a usable structured draft. ${messages[0] ?? "The provider returned an unknown error."}`;
   }
   return messages[0] ?? "The provider stage reported an error. Expand the details object below.";
+}
+
+function diagnosticUrl(key: string): string {
+  const path = diagnosticReferenceHref(key);
+  return typeof window === "undefined" ? path : new URL(path, window.location.origin).href;
+}
+
+function logDiagnosticDefinition(key: string) {
+  const entry = getDiagnosticEntry(key);
+  console.group(`${entry.title} • internal key: ${entry.key}`);
+  console.info("What this means:", entry.summary);
+  console.info("What HypeForge does:", entry.decision);
+  console.info("Validator:", entry.validator);
+  console.info("Pipeline stage:", entry.stage);
+  console.info("Likely causes:", entry.likelyCauses);
+  console.info("How to investigate and fix:", entry.fixes);
+  console.table(entry.locations.map((location) => ({
+    file: location.path,
+    responsibility: location.purpose,
+  })));
+  console.info("Full diagnostic reference:", diagnosticUrl(key));
+  console.groupEnd();
 }
 
 // Dev-only structured console logging for every API exchange; production
@@ -412,6 +436,9 @@ export function logApiExchange(args: {
     if (attemptCount > 0) console.info("Automatic attempts made:", attemptCount);
     if (diagnostic.failedRuleLabels.length > 0) console.info("Rules that failed:", diagnostic.failedRuleLabels);
     console.info("Request reference:", { requestId, endpoint: args.endpoint, status: statusLabel, elapsedMs });
+    console.group("Diagnostic definitions and repair locations");
+    for (const key of [...new Set(diagnostic.failedRuleIds)]) logDiagnosticDefinition(key);
+    console.groupEnd();
     console.groupEnd();
   }
 
@@ -459,6 +486,7 @@ export function logApiExchange(args: {
               ? "Missing from the output; there is no phrase to highlight."
               : "The evaluator judged the complete output against the previous version.",
         );
+        if (typeof failure.ruleId === "string") logDiagnosticDefinition(failure.ruleId);
       }
       console.groupEnd();
     }
@@ -473,6 +501,11 @@ export function logApiExchange(args: {
       console.error(`${index + 1}. ${event.message}`);
       console.info("Plain-English meaning:", providerEventExplanation(event));
       console.log("Redacted technical payload:", { requestId, route: debug?.route, timestamp: event.timestamp, details: event.details });
+      const details = detailsRecord(event.details);
+      const keys = Array.isArray(details?.failedRuleIds)
+        ? details.failedRuleIds.filter((item): item is string => typeof item === "string")
+        : [inferDiagnosticKey(nestedErrorMessages(event.details).join(" ") || event.message)];
+      for (const key of [...new Set(keys)]) logDiagnosticDefinition(key);
     }
     const diagnosticsPath = `/admin?request=${encodeURIComponent(requestId)}`;
     const diagnosticsUrl = typeof window === "undefined"

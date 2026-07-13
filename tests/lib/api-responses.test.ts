@@ -53,6 +53,7 @@ describe("plain-language API diagnostics", () => {
     expect(diagnostic.why).toContain("Made-up statistic");
     expect(diagnostic.howToFix).toContain("drama button again");
     expect(diagnostic.existingContentSafe).toContain("preserved unchanged");
+    expect(diagnostic.failedRuleIds).toEqual(["made-up-statistic"]);
   });
 
   it("uses action-accurate card copy instead of telling escalation users to find a retry button", () => {
@@ -82,6 +83,7 @@ describe("plain-language API diagnostics", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const table = vi.spyOn(console, "table").mockImplementation(() => undefined);
 
     logApiExchange({
       endpoint: "POST /api/escalate",
@@ -101,6 +103,10 @@ describe("plain-language API diagnostics", () => {
     expect(error).toHaveBeenCalledWith("Failed check: Made-up statistic");
     expect(info).toHaveBeenCalledWith("Where:", "Missing from the output; there is no phrase to highlight.");
     expect(info).toHaveBeenCalledWith("Plain-English meaning:", expect.stringContaining("Final failed checks"));
+    expect(group).toHaveBeenCalledWith("Made-up statistic was missing or unreadable • internal key: made-up-statistic");
+    expect(info).toHaveBeenCalledWith("Validator:", expect.stringContaining("TypeScript"));
+    expect(info).toHaveBeenCalledWith("How to investigate and fix:", expect.any(Array));
+    expect(info).toHaveBeenCalledWith("Full diagnostic reference:", expect.stringContaining("/admin/reference?issue=made-up-statistic"));
 
     group.mockRestore();
     groupCollapsed.mockRestore();
@@ -109,6 +115,7 @@ describe("plain-language API diagnostics", () => {
     info.mockRestore();
     log.mockRestore();
     warn.mockRestore();
+    table.mockRestore();
   });
 
   it("does not call a partial deck a success and explains the unavailable persona", () => {
@@ -119,6 +126,7 @@ describe("plain-language API diagnostics", () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
     const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const table = vi.spyOn(console, "table").mockImplementation(() => undefined);
 
     logApiExchange({
       endpoint: "POST /api/generate",
@@ -144,5 +152,6 @@ describe("plain-language API diagnostics", () => {
     info.mockRestore();
     log.mockRestore();
     warn.mockRestore();
+    table.mockRestore();
   });
 });

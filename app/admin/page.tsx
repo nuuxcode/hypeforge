@@ -6,8 +6,10 @@ import { redirect } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
+  ArrowUpRight,
   ArrowLeft,
   Bot,
+  BookOpen,
   CheckCircle2,
   ChevronRight,
   CircleAlert,
@@ -19,6 +21,11 @@ import {
 } from "lucide-react";
 import { AdminActions } from "./admin-actions";
 import { ADMIN_SESSION_COOKIE, verifyAdminSession } from "@/lib/admin-auth";
+import {
+  diagnosticReferenceHref,
+  getDiagnosticEntry,
+  inferDiagnosticKey,
+} from "@/lib/diagnostic-catalog";
 import {
   listObservabilityRecords,
   type AiAttemptLogRecord,
@@ -101,14 +108,25 @@ function requestSummary(group: RequestGroup): string {
 
 function plainAttemptExplanation(attempt: AiAttemptLogRecord): string {
   if (attempt.outcome === "provider-error") {
-    return `Gemini did not return a usable structured draft. ${attempt.error?.message ?? "The provider failed before validation could run."}`;
+    const diagnostic = getDiagnosticEntry(inferDiagnosticKey(attempt.error?.message ?? "provider error"));
+    return `${diagnostic.summary} ${attempt.error?.message ? `Provider message: ${attempt.error.message}` : "Validation could not run because no usable draft arrived."}`;
   }
   if (attempt.outcome === "rejected-candidate") {
-    const rules = attempt.failedRuleIds.length > 0 ? attempt.failedRuleIds.join(", ") : "an unspecified guideline";
-    return `Gemini returned a draft, but HypeForge rejected it because it failed: ${rules}. The draft was not shown to the user.`;
+    const diagnostics = attempt.failedRuleIds.map(getDiagnosticEntry);
+    if (diagnostics.length === 1) {
+      return `Gemini returned a complete draft, but HypeForge did not use it. ${diagnostics[0].summary} ${diagnostics[0].decision}`;
+    }
+    const titles = diagnostics.length > 0 ? diagnostics.map((entry) => entry.title).join("; ") : "one or more unclassified checks";
+    return `Gemini returned a complete draft, but HypeForge did not use it because these checks rejected it: ${titles}. Existing valid content was preserved.`;
   }
   if (attempt.outcome === "recovered") return "A later automatic repair passed all deterministic checks and the independent AI audit.";
   return "The first draft passed all deterministic checks and the independent AI audit.";
+}
+
+function diagnosticKeysForAttempt(attempt: AiAttemptLogRecord): string[] {
+  if (attempt.failedRuleIds.length > 0) return [...new Set(attempt.failedRuleIds)];
+  if (attempt.outcome === "provider-error") return [inferDiagnosticKey(attempt.error?.message ?? "provider error")];
+  return [];
 }
 
 function StatusIcon({ severity }: { severity: RequestGroup["severity"] }) {
@@ -219,6 +237,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           <Link className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeView === "all" ? "bg-white shadow-sm" : "text-[#4b4b50] hover:text-[#1d1d1f]"}`} href="/admin?view=all">
             All requests ({groups.length})
           </Link>
+          <Link className="ml-auto inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-[#4b4b50] transition hover:bg-white hover:text-[#1d1d1f] hover:shadow-sm" href="/admin/reference">
+            <BookOpen aria-hidden="true" className="size-4" /> Error reference
+          </Link>
         </nav>
 
         {request ? (
@@ -275,8 +296,20 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                         <span className="rounded-lg bg-[#f5f5f7] px-2.5 py-1 font-mono text-xs">{attempt.operation}</span>
                       </div>
                       <p className="mt-4 text-sm leading-6 text-[#3a3a3f]">{plainAttemptExplanation(attempt)}</p>
-                      {attempt.failedRuleIds.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap gap-2">{attempt.failedRuleIds.map((rule) => <span className="rounded-md bg-[#e45c54]/10 px-2 py-1 text-xs font-semibold text-[#8f2924]" key={rule}>{rule}</span>)}</div>
+                      {diagnosticKeysForAttempt(attempt).length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">{diagnosticKeysForAttempt(attempt).map((key) => {
+                          const diagnostic = getDiagnosticEntry(key);
+                          return (
+                            <Link
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-[#e45c54]/20 bg-[#e45c54]/10 px-2.5 py-1.5 text-xs font-semibold text-[#8f2924] transition hover:border-[#e45c54]/40 hover:bg-[#e45c54]/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6e5ae6]"
+                              href={diagnosticReferenceHref(key)}
+                              key={key}
+                              title={`Open the full explanation for ${key}`}
+                            >
+                              {diagnostic.title} <ArrowUpRight aria-hidden="true" className="size-3.5" />
+                            </Link>
+                          );
+                        })}</div>
                       ) : null}
                       {attempt.failureDetails?.length ? (
                         <div className="mt-4 space-y-2">
@@ -318,8 +351,61 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
                           </div>
                         </div>
                       ) : null}
+                      {diagnosticKeysForAttempt(attempt).map((key) => {
+                        const diagnostic = getDiagnosticEntry(key);
+                        return (
+                          <section className="mt-4 overflow-hidden rounded-xl border border-[#6e5ae6]/20 bg-[#6e5ae6]/[0.045]" key={`diagnosis-${key}`}>
+                            <div className="border-b border-[#6e5ae6]/15 px-4 py-3">
+                              <p className="text-xs font-semibold uppercase text-[#6e5ae6]">How to understand and repair this</p>
+                              <div className="mt-1 flex flex-wrap items-baseline justify-between gap-2">
+                                <h3 className="font-semibold">{diagnostic.title}</h3>
+                                <code className="rounded bg-white px-2 py-1 text-[0.7rem] text-[#6e6e73]">{diagnostic.key}</code>
+                              </div>
+                            </div>
+                            <div className="grid gap-4 p-4 lg:grid-cols-2">
+                              <div>
+                                <p className="text-xs font-semibold uppercase text-[#6e6e73]">What it means</p>
+                                <p className="mt-1 text-sm leading-6 text-[#3a3a3f]">{diagnostic.summary}</p>
+                                <p className="mt-3 text-xs font-semibold uppercase text-[#6e6e73]">System decision</p>
+                                <p className="mt-1 text-sm leading-6 text-[#3a3a3f]">{diagnostic.decision}</p>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold uppercase text-[#6e6e73]">Validator</p>
+                                <p className="mt-1 text-sm font-medium text-[#3a3a3f]">{diagnostic.validator}</p>
+                                <p className="mt-3 text-xs font-semibold uppercase text-[#6e6e73]">Pipeline stage</p>
+                                <p className="mt-1 text-sm text-[#3a3a3f]">{diagnostic.stage}</p>
+                              </div>
+                            </div>
+                            <details className="border-t border-[#6e5ae6]/15 px-4 py-3">
+                              <summary className="cursor-pointer font-semibold">Likely causes, repair steps, and code locations</summary>
+                              <div className="mt-4 grid gap-5 lg:grid-cols-3">
+                                <div>
+                                  <p className="text-xs font-semibold uppercase text-[#6e6e73]">Likely causes</p>
+                                  <ul className="mt-2 space-y-2 text-sm leading-5 text-[#3a3a3f]">{diagnostic.likelyCauses.map((cause) => <li key={cause}>• {cause}</li>)}</ul>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase text-[#6e6e73]">Repair checklist</p>
+                                  <ol className="mt-2 space-y-2 text-sm leading-5 text-[#3a3a3f]">{diagnostic.fixes.map((fix, index) => <li key={fix}>{index + 1}. {fix}</li>)}</ol>
+                                </div>
+                                <div>
+                                  <p className="text-xs font-semibold uppercase text-[#6e6e73]">Open these files</p>
+                                  <ul className="mt-2 space-y-2">{diagnostic.locations.map((location) => (
+                                    <li className="rounded-lg bg-white p-2.5" key={`${location.path}-${location.label}`}>
+                                      <code className="break-all text-xs font-semibold text-[#5f4bd4]">{location.path}</code>
+                                      <p className="mt-1 text-xs leading-5 text-[#6e6e73]">{location.purpose}</p>
+                                    </li>
+                                  ))}</ul>
+                                </div>
+                              </div>
+                              <Link className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#5f4bd4] hover:underline" href={diagnosticReferenceHref(key)}>
+                                Open the full reference <ArrowUpRight aria-hidden="true" className="size-4" />
+                              </Link>
+                            </details>
+                          </section>
+                        );
+                      })}
                       <details className="mt-4 rounded-lg bg-[#f5f5f7] p-3">
-                        <summary className="cursor-pointer text-sm font-semibold">Technical record</summary>
+                        <summary className="cursor-pointer text-sm font-semibold">Raw technical record (JSON)</summary>
                         <pre className="mt-3 max-h-[520px] overflow-auto whitespace-pre-wrap break-words font-mono text-[0.72rem] leading-5 text-[#3a3a3f]">{JSON.stringify(attempt, null, 2)}</pre>
                       </details>
                     </section>
