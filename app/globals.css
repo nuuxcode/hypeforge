@@ -21,12 +21,100 @@ html, body {
   --coral: #ff6b5f;
 }
 
+/* The v2 shell is transparent so the fixed decorative backdrop shows through;
+   the themed base fill therefore lives on <body>. It is theme-aware via :has()
+   because the theme class sits on the in-page .v2-shell (not on html/body),
+   which keeps an opaque, correctly-themed background behind real content for
+   contrast in both light and dark. */
 body {
-  background:
-    linear-gradient(rgba(21, 21, 21, 0.045) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(21, 21, 21, 0.045) 1px, transparent 1px),
-    #f5efe2;
-  background-size: 28px 28px;
+  background: #f5f5f7;
+  transition: background 260ms ease;
+}
+
+body:has(.v2-shell.v2-dark) {
+  background: #000000;
+}
+
+/* Decorative fixed backdrop: two faint radial glows + an edge-fading dot grid.
+   Sits at z-index -1 so it renders in front of the body fill but behind all
+   content. Colors flip with the app's manual theme via :has() on the shell. */
+.app-backdrop {
+  --backdrop-violet: rgba(110, 90, 230, 0.05);
+  --backdrop-ember: rgba(219, 91, 42, 0.05);
+  --backdrop-dot: rgba(17, 16, 21, 0.05);
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+body:has(.v2-shell.v2-dark) .app-backdrop {
+  --backdrop-violet: rgba(157, 140, 255, 0.07);
+  --backdrop-ember: rgba(219, 91, 42, 0.06);
+  --backdrop-dot: rgba(255, 255, 255, 0.07);
+}
+
+.app-backdrop-glow {
+  position: absolute;
+  border-radius: 50%;
+  /* The soft edge comes entirely from the gradient falloff, never filter:blur
+     (blur is expensive to paint on a full-viewport layer). */
+}
+
+.app-backdrop-glow-violet {
+  top: -18vw;
+  left: -14vw;
+  width: 74vw;
+  height: 74vw;
+  background: radial-gradient(circle at center, var(--backdrop-violet) 0%, transparent 62%);
+}
+
+.app-backdrop-glow-ember {
+  right: -12vw;
+  bottom: -18vw;
+  width: 68vw;
+  height: 68vw;
+  background: radial-gradient(circle at center, var(--backdrop-ember) 0%, transparent 62%);
+}
+
+.app-backdrop-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, var(--backdrop-dot) 1px, transparent 1px);
+  background-size: 24px 24px;
+  /* Fade the dots out toward the middle so the content area stays calm and only
+     the edges carry texture. */
+  -webkit-mask-image: radial-gradient(ellipse at center, transparent 0%, transparent 34%, #000 82%);
+  mask-image: radial-gradient(ellipse at center, transparent 0%, transparent 34%, #000 82%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .app-backdrop-glow-violet {
+    animation: app-backdrop-drift-violet 34s ease-in-out infinite alternate;
+  }
+
+  .app-backdrop-glow-ember {
+    animation: app-backdrop-drift-ember 44s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes app-backdrop-drift-violet {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(1.5rem, -3.5rem, 0) scale(1.08);
+  }
+}
+
+@keyframes app-backdrop-drift-ember {
+  from {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  to {
+    transform: translate3d(-3rem, -2rem, 0) scale(1.06);
+  }
 }
 
 button,
@@ -69,7 +157,9 @@ textarea {
   --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 12px 36px rgba(0, 0, 0, 0.06);
   --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.055);
   --gradient: linear-gradient(110deg, #765ee8 0%, #c94aa5 100%);
-  background: var(--bg);
+  /* Transparent so the fixed .app-backdrop shows through; the themed base fill
+     lives on <body> (kept opaque for contrast). */
+  background: transparent;
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
 }
@@ -103,7 +193,7 @@ textarea {
   --muted-fill-strong: rgba(255, 255, 255, 0.13);
   --panel-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
   --card-shadow: 0 12px 36px rgba(0, 0, 0, 0.28);
-  background: var(--bg);
+  background: transparent;
 }
 
 .v2-display {
@@ -152,6 +242,28 @@ textarea {
   opacity: 0;
   background: linear-gradient(100deg, transparent 0%, color-mix(in srgb, var(--bucket-accent) 15%, transparent) 45%, transparent 100%);
   transform: translateX(-150%) skewX(-12deg);
+}
+
+/* Faint vertical wash of the persona-bucket accent over the top ~30% of every
+   card (result + loading), sitting below the content raised by `.v2-card > *`. */
+.v2-card::after {
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 auto 0;
+  height: 30%;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bucket-accent) 5%, transparent) 0%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Gentle hover lift on idle result cards only (never loading or the forge
+     preview). Snappy 150ms in; reverts via the card's base transition. */
+  .v2-card:hover:not([data-loading="true"]):not(.v2-forge-card) {
+    transform: translateY(-2px);
+    box-shadow: var(--card-shadow), 0 16px 34px color-mix(in srgb, var(--bucket-accent) 12%, transparent), inset 0 2px 0 var(--bucket-accent);
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
 }
 
 .v2-card[data-drama-level="2"] {
@@ -235,11 +347,80 @@ textarea {
 }
 
 .v2-composer {
+  position: relative;
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 22px;
   background: var(--panel);
   box-shadow: var(--panel-shadow);
+}
+
+/* Tiny four-point sparks in the hero card's top-right, echoing the logo motif.
+   Decorative (aria-hidden), very low opacity, lighter violet in dark mode. */
+.v2-hero-sparks {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 150px;
+  height: 130px;
+  pointer-events: none;
+  color: #7c3aed;
+}
+
+.v2-dark .v2-hero-sparks {
+  color: #a78bfa;
+}
+
+.v2-hero-sparks svg {
+  position: absolute;
+  fill: currentColor;
+}
+
+.v2-hero-spark-1 {
+  top: 18px;
+  right: 22px;
+  width: 26px;
+  height: 26px;
+  opacity: 0.1;
+}
+
+.v2-hero-spark-2 {
+  top: 52px;
+  right: 60px;
+  width: 16px;
+  height: 16px;
+  opacity: 0.08;
+}
+
+.v2-hero-spark-3 {
+  top: 80px;
+  right: 30px;
+  width: 12px;
+  height: 12px;
+  opacity: 0.07;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .v2-hero-spark-1 {
+    animation: v2-spark-breathe 6s ease-in-out infinite alternate;
+  }
+  .v2-hero-spark-2 {
+    animation: v2-spark-breathe 7.5s ease-in-out 0.4s infinite alternate;
+  }
+  .v2-hero-spark-3 {
+    animation: v2-spark-breathe 9s ease-in-out 0.8s infinite alternate;
+  }
+}
+
+@keyframes v2-spark-breathe {
+  from {
+    opacity: 0.06;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0.1;
+    transform: scale(1.12);
+  }
 }
 
 .v2-input {
@@ -285,6 +466,43 @@ textarea {
 .v2-dark .v2-primary-button:disabled {
   background: #3a3a3c;
   color: #8e8e93;
+}
+
+/* Generate button only (scoped modifier, not the shared primary style): a
+   subtle violet-600 -> violet-500 gradient with a soft colored shadow. The
+   .v2-primary-button:disabled rules above still win by specificity, so the
+   disabled look is unchanged. */
+.v2-cta-primary {
+  background: linear-gradient(90deg, #7c3aed 0%, #8b5cf6 100%);
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+}
+
+.v2-cta-primary:hover:not(:disabled) {
+  background: linear-gradient(90deg, #6d28d9 0%, #7c3aed 100%);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.35);
+}
+
+.v2-dark .v2-cta-primary {
+  background: linear-gradient(90deg, #8b78f5 0%, #9d8cff 100%);
+}
+
+.v2-dark .v2-cta-primary:hover:not(:disabled) {
+  background: linear-gradient(90deg, #7c68ec 0%, #8f7bfa 100%);
+}
+
+/* Hero headline accent: only the second phrase gets violet -> warm-orange
+   gradient text. Lighter stops in dark mode for legibility. */
+.v2-hero-gradient {
+  background: linear-gradient(100deg, #7c3aed 0%, #f97316 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.v2-dark .v2-hero-gradient {
+  background: linear-gradient(100deg, #a78bfa 0%, #fb923c 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
 }
 
 .v2-secondary-button,

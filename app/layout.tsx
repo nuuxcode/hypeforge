@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { AppBackdrop } from "@/components/app-backdrop";
 import { SITE_NAME, siteUrl } from "@/lib/site";
 import "./globals.css";
 
@@ -50,8 +51,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en">
-      <body className="min-h-dvh bg-[#f5efe2] text-neutral-950 antialiased">
+      <body className="min-h-dvh text-neutral-950 antialiased">
         <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+        <AppBackdrop />
         {children}
       </body>
     </html>

@@ -6,6 +6,18 @@ import type { DeliveryMode } from "@/lib/types";
 import { MAX_DETAILS_LENGTH, MAX_INPUT_LENGTH } from "@/lib/validate";
 import { playForgeSound } from "@/lib/forge-sound";
 
+// Tiny four-point spark echoing the logo motif. Decorative only.
+function HeroSparks() {
+  const spark = "M12 1 C12.6 6.4 17.6 11.4 23 12 C17.6 12.6 12.6 17.6 12 23 C11.4 17.6 6.4 12.6 1 12 C6.4 11.4 11.4 6.4 12 1 Z";
+  return (
+    <span aria-hidden="true" className="v2-hero-sparks">
+      <svg className="v2-hero-spark-1" viewBox="0 0 24 24"><path d={spark} /></svg>
+      <svg className="v2-hero-spark-2" viewBox="0 0 24 24"><path d={spark} /></svg>
+      <svg className="v2-hero-spark-3" viewBox="0 0 24 24"><path d={spark} /></svg>
+    </span>
+  );
+}
+
 // One chip is a person-details description on purpose: it shows the input
 // takes more than bare job titles.
 const EXAMPLES = [
@@ -45,8 +57,9 @@ export function V2InputPanel({
 
   return (
     <section className={`v2-composer self-start ${compact ? "hidden p-5 lg:sticky lg:top-24 lg:block" : "p-6 sm:p-8"}`}>
+      {!compact ? <HeroSparks /> : null}
       <h1 className={`v2-display font-semibold text-[var(--text)] ${compact ? "text-xl" : "text-4xl sm:text-5xl"}`}>
-        {compact ? "New deck" : "Make someone’s day."}
+        {compact ? "New deck" : <>Make <span className="v2-hero-gradient">someone’s day.</span></>}
       </h1>
       {!compact ? (
         <p className="mt-4 max-w-xl text-base font-medium leading-7 text-[var(--text-muted)]">
@@ -155,7 +168,7 @@ export function V2InputPanel({
         </div>
 
         <button
-          className="v2-primary-button inline-flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
+          className="v2-primary-button v2-cta-primary inline-flex min-h-12 w-full items-center justify-center gap-2 px-5 py-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-45"
           disabled={!canGenerate || isGenerating}
           type="submit"
         >
