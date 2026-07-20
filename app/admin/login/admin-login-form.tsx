@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle, LockKeyhole } from "lucide-react";
 
 export function AdminLoginForm({ configured }: { configured: boolean }) {
+  const router = useRouter();
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [opening, setOpening] = useState(false);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -21,12 +24,15 @@ export function AdminLoginForm({ configured }: { configured: boolean }) {
       const body = await response.json() as { ok?: boolean; error?: string };
       if (!response.ok || !body.ok) {
         setError(body.error ?? "Admin sign-in failed.");
+        setPending(false);
         return;
       }
-      window.location.assign("/admin");
+      // Stay in the pending state through the client-side navigation so the
+      // button never looks idle while the dashboard loads its records.
+      setOpening(true);
+      router.push("/admin");
     } catch {
       setError("The server could not be reached. Check that HypeForge is running.");
-    } finally {
       setPending(false);
     }
   }
@@ -59,7 +65,7 @@ export function AdminLoginForm({ configured }: { configured: boolean }) {
         type="submit"
       >
         {pending ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : <LockKeyhole aria-hidden="true" className="size-4" />}
-        {pending ? "Checking code…" : "Open diagnostics"}
+        {opening ? "Opening diagnostics…" : pending ? "Checking code…" : "Open diagnostics"}
         {!pending ? <ArrowRight aria-hidden="true" className="size-4" /> : null}
       </button>
     </form>

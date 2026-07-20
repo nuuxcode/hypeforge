@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { Activity, ArrowLeft, Sparkles } from "lucide-react";
+import { Activity, ArrowLeft } from "lucide-react";
 import { AdminLoginForm } from "./admin-login-form";
 import { ADMIN_SESSION_COOKIE, adminAccessConfigured, verifyAdminSession } from "@/lib/admin-auth";
 
@@ -16,10 +17,7 @@ export default async function AdminLoginPage() {
     <main className="min-h-dvh bg-[#f5f5f7] px-4 py-8 text-[#1d1d1f] sm:grid sm:place-items-center">
       <section className="mx-auto w-full max-w-md rounded-2xl border border-black/10 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.08)] sm:p-8">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <span className="grid size-9 place-items-center rounded-xl bg-[#6e5ae6]/10 text-[#6e5ae6]"><Sparkles aria-hidden="true" className="size-4" /></span>
-            <span className="font-semibold">HypeForge</span>
-          </div>
+          <Image alt="HypeForge" className="h-8 w-auto" height={200} priority src="/brand/hypeforge-logo-light.png" width={620} />
           <Activity aria-hidden="true" className="size-5 text-[#6e5ae6]" />
         </div>
         <p className="mt-10 text-xs font-semibold uppercase text-[#6e5ae6]">Private operations</p>

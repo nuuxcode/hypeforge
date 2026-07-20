@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -15,11 +16,11 @@ import {
   CircleAlert,
   Code2,
   ShieldCheck,
-  Sparkles,
   Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { AdminActions } from "./admin-actions";
+import { TabLink } from "./tab-link";
 import { AdminModelSettings } from "@/components/admin-model-settings";
 import { ADMIN_SESSION_COOKIE, verifyAdminSession } from "@/lib/admin-auth";
 import {
@@ -194,9 +195,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       <header className="sticky top-0 z-20 border-b border-black/10 bg-white/90 backdrop-blur-xl">
         <div className="mx-auto flex min-h-16 max-w-[1380px] items-center justify-between gap-4 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-[#6e5ae6]/10 text-[#6e5ae6]"><Sparkles aria-hidden="true" className="size-4" /></span>
-            <div className="min-w-0">
-              <p className="truncate font-semibold">HypeForge diagnostics</p>
+            <Image alt="HypeForge" className="h-8 w-auto shrink-0" height={200} priority src="/brand/hypeforge-logo-light.png" width={620} />
+            <div className="min-w-0 border-l border-black/10 pl-3">
+              <p className="truncate font-semibold">Diagnostics</p>
               <p className="hidden truncate text-xs text-[#6e6e73] min-[430px]:block">Private, redacted operational logs</p>
             </div>
           </div>
@@ -234,12 +235,12 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         </section>
 
         <nav className="mt-8 flex items-center gap-1 rounded-xl bg-[#e8e8ed] p-1" aria-label="Log filters">
-          <Link className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeView === "issues" ? "bg-white shadow-sm" : "text-[#4b4b50] hover:text-[#1d1d1f]"}`} href="/admin?view=issues">
+          <TabLink active={activeView === "issues"} href="/admin?view=issues">
             Issues ({issueCount})
-          </Link>
-          <Link className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${activeView === "all" ? "bg-white shadow-sm" : "text-[#4b4b50] hover:text-[#1d1d1f]"}`} href="/admin?view=all">
+          </TabLink>
+          <TabLink active={activeView === "all"} href="/admin?view=all">
             All requests ({groups.length})
-          </Link>
+          </TabLink>
           <Link className="ml-auto inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-[#4b4b50] transition hover:bg-white hover:text-[#1d1d1f] hover:shadow-sm" href="/admin/reference">
             <BookOpen aria-hidden="true" className="size-4" /> Error reference
           </Link>
