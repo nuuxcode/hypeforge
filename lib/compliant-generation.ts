@@ -227,6 +227,7 @@ export async function generateCompliantCompliment(args: {
       personaId: args.personaId,
       attempt,
       repaired: attempt > 1,
+      modelOverride: args.models && Object.keys(args.models).length > 0 ? args.models : undefined,
     });
     try {
       const candidate = await generateGuidelineCandidate(

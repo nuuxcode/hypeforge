@@ -6,6 +6,7 @@ import {
   type ComplianceProgress,
 } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
+import { requestHasAdminSession } from "@/lib/admin-auth";
 import { sanitizeModelSelection } from "@/lib/models";
 import { getPersona } from "@/lib/personas";
 import { buildEscalationMessages } from "@/lib/prompts";
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
         deliveryMode: body.data.deliveryMode,
         previousText: currentText,
         debug,
-        models: sanitizeModelSelection(body.data.models),
+        models: requestHasAdminSession(req) ? sanitizeModelSelection(body.data.models) : {},
         temperature: 1.05,
         maxOutputTokens: 260,
         onProgress,

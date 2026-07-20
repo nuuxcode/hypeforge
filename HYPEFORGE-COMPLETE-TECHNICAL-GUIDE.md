@@ -379,7 +379,7 @@ Defaults, all configurable through environment variables:
 - Provider timeout: 25 seconds by default.
 - Candidate maximum output: 260 tokens.
 
-In addition to the environment defaults, the Settings dialog offers a per-role model picker (writer, backup, judge) backed by a predefined allowlist in `lib/models.ts`. The browser stores the choice locally and sends it with each request; the server accepts only allowlisted model ids and falls back to the environment configuration when no valid override is present.
+In addition to the environment defaults, the private admin page offers a per-role model picker (writer, backup, judge) backed by a predefined allowlist in `lib/models.ts`. The admin's browser stores the choice locally and sends it with each request; the server honors an override only when the request carries a valid admin session cookie, accepts only allowlisted model ids, and falls back to the environment configuration otherwise.
 
 There is **no embedded, local, or template fallback LLM**. Every newly generated compliment comes from Gemini. If Gemini and its configured fallbacks cannot produce a valid result, HypeForge reports a failure and keeps existing valid content rather than pretending a local template is AI output.
 

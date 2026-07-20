@@ -51,3 +51,15 @@ export function adminCookieOptions(maxAge = SESSION_TTL_SECONDS) {
     maxAge,
   };
 }
+
+// Lets API routes honor privileged options (like model overrides) only when
+// the request carries a valid admin session cookie.
+export function requestHasAdminSession(req: Request): boolean {
+  const header = req.headers.get("cookie") ?? "";
+  const match = header
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${ADMIN_SESSION_COOKIE}=`));
+  if (!match) return false;
+  return verifyAdminSession(decodeURIComponent(match.slice(ADMIN_SESSION_COOKIE.length + 1)));
+}

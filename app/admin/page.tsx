@@ -20,6 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { AdminActions } from "./admin-actions";
+import { AdminModelSettings } from "@/components/admin-model-settings";
 import { ADMIN_SESSION_COOKIE, verifyAdminSession } from "@/lib/admin-auth";
 import {
   diagnosticReferenceHref,
@@ -216,6 +217,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
           </div>
           <p className="rounded-lg bg-white px-3 py-2 text-xs font-medium text-[#6e6e73] shadow-sm">Times shown in Casablanca</p>
         </div>
+
+        <AdminModelSettings />
 
         <section className="mt-8 grid gap-px overflow-hidden rounded-2xl border border-black/10 bg-black/10 sm:grid-cols-4" aria-label="Diagnostic summary">
           {SUMMARY_ITEMS.map(({ label, value, icon: Icon }) => {

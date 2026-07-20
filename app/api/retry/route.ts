@@ -2,6 +2,7 @@ import { providerErrorMessage } from "@/lib/ai";
 import { rateLimitCookie, rateLimitHeaders, readRateLimit } from "@/lib/api-rate-limit";
 import { generateCompliantCompliment, isGuidelineComplianceError } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
+import { requestHasAdminSession } from "@/lib/admin-auth";
 import { sanitizeModelSelection } from "@/lib/models";
 import { getPersona } from "@/lib/personas";
 import { buildInitialMessages } from "@/lib/prompts";
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
       operation: "retry",
       deliveryMode: body.data.deliveryMode,
       debug,
-      models: sanitizeModelSelection(body.data.models),
+      models: requestHasAdminSession(req) ? sanitizeModelSelection(body.data.models) : {},
       temperature: 1,
       maxOutputTokens: 260,
     });

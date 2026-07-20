@@ -7,6 +7,7 @@ import {
   underlyingDeckFailure,
 } from "@/lib/deck-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
+import { requestHasAdminSession } from "@/lib/admin-auth";
 import { sanitizeModelSelection } from "@/lib/models";
 import { cleanPreferenceContext, GenerateBodySchema, resolveSubject } from "@/lib/validate";
 
@@ -83,7 +84,7 @@ export async function POST(req: Request) {
       deliveryMode: body.data.deliveryMode,
       preference,
       debug,
-      models: sanitizeModelSelection(body.data.models),
+      models: requestHasAdminSession(req) ? sanitizeModelSelection(body.data.models) : {},
     });
   } catch (error) {
     if (!isCompleteDeckError(error)) {

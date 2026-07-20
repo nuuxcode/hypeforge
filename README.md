@@ -23,7 +23,7 @@ Turns a job title or person description into three wildly enthusiastic, slightly
 - Crawlable compliment guide, metadata, Open Graph image, JSON-LD, `robots.txt`, and sitemap
 - Company Compliment Guidelines v2.1 enforced across generation, retry, tweak, and escalation
 - Per-version 8/8 rule proof with code, evidence, heuristic, and model check sources; the badge headline honestly splits code-verified from AI-audited checks, with a settings toggle for the wording
-- Per-role Gemini model selection in Settings (writer, backup, judge) from a predefined allowlist, with server-side validation and environment defaults
+- Per-role Gemini model selection (writer, backup, judge) on the private admin page, from a predefined allowlist; the server honors overrides only from an authenticated admin session and everyone else gets the environment defaults
 - Independent semantic validator for appearance, metaphor quality, public figures, workplace safety, and escalation quality
 - Deck-wide duplicate, opening, metaphor, statistic, persona-fit, imagery, and humor checks with targeted card regeneration
 - Private code-protected diagnostics at `/admin`, with a 30-day signed session, error-first request history, complete redacted server timelines, model outputs, rule failures, provider errors, and automatic-repair outcomes
@@ -36,7 +36,7 @@ Next.js App Router, TypeScript, Tailwind CSS, server API routes, Vercel AI SDK, 
 
 Gemini 3.1 Flash-Lite by default (with an automatic backup model and a temperature-0 validator pass), for three reasons: it is fast and free-tier friendly, so generating three compliments plus a compliance audit per request stays affordable; it supports structured output natively, so "exactly one compliment with exact rule evidence" is enforced by schema instead of hoped for; and the same family serves as an independent validator model, keeping the show-your-work audit on one provider.
 
-The Settings dialog can switch each model role (writer, backup, judge) at request time from a predefined list in `lib/models.ts`, from Flash-Lite up to Pro. The browser stores the choice locally and sends it with each request; the server accepts only allowlisted model ids and otherwise falls back to the `GEMINI_MODEL_*` environment defaults. A full requirement-to-code map lives in [COMPLIANCE.md](./COMPLIANCE.md).
+The private admin page can switch each model role (writer, backup, judge) at request time from a predefined list in `lib/models.ts`, from Flash-Lite up to Pro. The admin's browser stores the choice locally and sends it with each request; the server honors an override only when the request carries a valid admin session, accepts only allowlisted model ids, and otherwise falls back to the `GEMINI_MODEL_*` environment defaults. A full requirement-to-code map lives in [COMPLIANCE.md](./COMPLIANCE.md).
 
 ## Prompt Design
 
