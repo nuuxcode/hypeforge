@@ -234,12 +234,15 @@ function normalizeObservabilityRecord(value: unknown): ObservabilityLogRecord | 
 }
 
 async function readBlobRecord(pathname: string): Promise<ObservabilityLogRecord | null> {
-  const result = await get(pathname, { access: "private", useCache: false });
-  if (!result || result.statusCode !== 200 || !result.stream) return null;
   try {
+    const result = await get(pathname, { access: "private", useCache: false });
+    if (!result || result.statusCode !== 200 || !result.stream) return null;
     const value = JSON.parse(await new Response(result.stream).text());
     return normalizeObservabilityRecord(value);
   } catch {
+    // A private store can list blob metadata but reject content reads with the
+    // read-write token (403); treat an unreadable record as absent rather than
+    // failing the whole dashboard.
     return null;
   }
 }
