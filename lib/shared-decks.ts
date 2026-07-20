@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { get, put } from "@vercel/blob";
+import { asStoredRecord, getRedis, hfKey, redisConfigured } from "./redis";
 import { MAX_COMPLIMENT_LENGTH } from "./safeText";
 import { VerifiedGuidelineComplianceSchema } from "./compliment-guidelines";
 import type { DeliveryMode, GuidelineCompliance } from "./types";
@@ -40,6 +41,10 @@ type SharedDeckStore = {
 const MAX_SHARED_DECKS = 500;
 const SLUG_PATTERN = /^[A-Za-z0-9_-]{8,20}$/;
 const BLOB_PREFIX = "hypeforge-shares";
+
+function shareKey(slug: string): string {
+  return hfKey(`share:${slug}`);
+}
 
 function normalizeDeliveryMode(value: unknown, fallback: DeliveryMode = "public"): DeliveryMode {
   return value === "direct" || value === "public" ? value : fallback;
@@ -145,6 +150,15 @@ function nextSlug(existing: Set<string>): string {
 
 export async function createSharedDeck(snapshot: SharedDeckSnapshot): Promise<PublishedDeck> {
   const clean = normalizeSnapshot(snapshot);
+  if (redisConfigured()) {
+    const deck: PublishedDeck = {
+      ...clean,
+      slug: nextSlug(new Set()),
+      createdAt: new Date().toISOString(),
+    };
+    await getRedis().set(shareKey(deck.slug), JSON.stringify(deck));
+    return deck;
+  }
   if (usesBlobStore()) {
     const deck: PublishedDeck = {
       ...clean,
@@ -174,6 +188,15 @@ export async function createSharedDeck(snapshot: SharedDeckSnapshot): Promise<Pu
 
 export async function getSharedDeck(slug: string): Promise<PublishedDeck | null> {
   if (!SLUG_PATTERN.test(slug)) return null;
+  if (redisConfigured()) {
+    try {
+      const parsed = asStoredRecord(await getRedis().get(shareKey(slug)));
+      if (!isPublishedDeck(parsed)) return null;
+      return { ...parsed, ...normalizeSnapshot(parsed) };
+    } catch {
+      return null;
+    }
+  }
   if (usesBlobStore()) {
     const result = await get(blobPath(slug), { access: "private", useCache: false });
     if (!result || result.statusCode !== 200 || !result.stream) return null;

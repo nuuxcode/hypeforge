@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { get, list, put } from "@vercel/blob";
+import { asStoredRecord, getRedis, hfKey, redisConfigured } from "./redis";
 import type { GuidelineModelOutput } from "./compliment-guidelines";
 import type { ApiDebug, DeliveryMode, GuidelineCompliance, PipelineFailureDetail } from "./types";
 
@@ -29,6 +30,16 @@ export type AiFailureLogInput = {
 
 const LOG_PREFIX = "hypeforge-ai-failures";
 const TRACE_PREFIX = "hypeforge-api-traces";
+// One capped Redis list holds every observability record. Reading it is a
+// single LRANGE, so the admin dashboard never fans out into per-record fetches.
+const OBS_LOG_KEY = hfKey("obs-log");
+const OBS_LOG_MAX = 500;
+
+async function pushObservabilityRecord(serialized: string): Promise<void> {
+  const redis = getRedis();
+  await redis.lpush(OBS_LOG_KEY, serialized);
+  await redis.ltrim(OBS_LOG_KEY, 0, OBS_LOG_MAX - 1);
+}
 const SECRET_PATTERNS = [
   /AIza[0-9A-Za-z_-]{20,}/g,
   /(api[_ -]?key[^\s:=]*[\s:=]+)[^\s,;]+/gi,
@@ -109,7 +120,9 @@ export async function captureAiFailure(input: AiFailureLogInput): Promise<void> 
   const serialized = JSON.stringify(record);
 
   try {
-    if (usesBlobStore()) {
+    if (redisConfigured()) {
+      await pushObservabilityRecord(serialized);
+    } else if (usesBlobStore()) {
       const date = createdAt.slice(0, 10);
       await put(`${LOG_PREFIX}/${date}/${input.requestId}-${input.attempt}-${record.id}.json`, serialized, {
         access: "private",
@@ -199,7 +212,9 @@ export async function captureApiTrace(debug: ApiDebug): Promise<void> {
   const serialized = JSON.stringify(record);
 
   try {
-    if (usesBlobStore()) {
+    if (redisConfigured()) {
+      await pushObservabilityRecord(serialized);
+    } else if (usesBlobStore()) {
       const date = record.createdAt.slice(0, 10);
       await put(`${TRACE_PREFIX}/${date}/${record.requestId}-${record.id}.json`, serialized, {
         access: "private",
@@ -286,7 +301,22 @@ async function listLocalRecords(limit: number): Promise<ObservabilityLogRecord[]
   }
 }
 
+async function listRedisRecords(limit: number): Promise<ObservabilityLogRecord[]> {
+  try {
+    const raw = await getRedis().lrange(OBS_LOG_KEY, 0, Math.min(limit, OBS_LOG_MAX) - 1);
+    return raw
+      .map((item) => normalizeObservabilityRecord(asStoredRecord(item)))
+      .filter((item): item is ObservabilityLogRecord => Boolean(item))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit);
+  } catch (error) {
+    console.error("[obs-log] redis read failed without blocking the dashboard", safeError(error));
+    return [];
+  }
+}
+
 export async function listObservabilityRecords(limit = 250): Promise<ObservabilityLogRecord[]> {
   if (!loggingEnabled()) return [];
+  if (redisConfigured()) return listRedisRecords(limit);
   return usesBlobStore() ? listBlobRecords(limit) : listLocalRecords(limit);
 }

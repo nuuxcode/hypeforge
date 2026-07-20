@@ -11,6 +11,8 @@ describe("AI failure logging", () => {
   const previousPath = process.env.HYPEFORGE_FAILURE_LOG_PATH;
   const previousBlobToken = process.env.BLOB_READ_WRITE_TOKEN;
   const previousBlobStore = process.env.BLOB_STORE_ID;
+  const previousRedisUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const previousRedisToken = process.env.UPSTASH_REDIS_REST_TOKEN;
 
   beforeEach(async () => {
     directory = await mkdtemp(path.join(os.tmpdir(), "hypeforge-failures-"));
@@ -18,6 +20,8 @@ describe("AI failure logging", () => {
     process.env.HYPEFORGE_FAILURE_LOG_PATH = path.join(directory, "failures.ndjson");
     delete process.env.BLOB_READ_WRITE_TOKEN;
     delete process.env.BLOB_STORE_ID;
+    delete process.env.UPSTASH_REDIS_REST_URL;
+    delete process.env.UPSTASH_REDIS_REST_TOKEN;
   });
 
   afterEach(async () => {
@@ -29,6 +33,10 @@ describe("AI failure logging", () => {
     else process.env.BLOB_READ_WRITE_TOKEN = previousBlobToken;
     if (previousBlobStore === undefined) delete process.env.BLOB_STORE_ID;
     else process.env.BLOB_STORE_ID = previousBlobStore;
+    if (previousRedisUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = previousRedisUrl;
+    if (previousRedisToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = previousRedisToken;
     await rm(directory, { recursive: true, force: true });
   });
 
