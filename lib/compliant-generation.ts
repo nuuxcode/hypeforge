@@ -9,6 +9,7 @@ import {
 } from "./compliment-guidelines";
 import type { GuidelineModelOutput } from "./compliment-guidelines";
 import type { createApiDebug } from "./debug";
+import type { ModelSelection } from "./models";
 import type { DeliveryMode, GuidelineCompliance, PipelineFailureDetail, RuleCheck } from "./types";
 
 type DebugLogger = ReturnType<typeof createApiDebug>;
@@ -172,6 +173,7 @@ export async function generateCompliantCompliment(args: {
   maxOutputTokens?: number;
   previousText?: string;
   deliveryMode?: DeliveryMode;
+  models?: ModelSelection;
   onProgress?: (progress: ComplianceProgress) => void;
 }): Promise<{ text: string; guidelines: GuidelineCompliance }> {
   if (!hasFunctionContext(args.subject) && args.subject.trim().split(/\s+/).length < 2) {
@@ -233,6 +235,7 @@ export async function generateCompliantCompliment(args: {
           temperature: attempt === 1 ? args.temperature : Math.min(args.temperature ?? 1, 0.75),
           maxOutputTokens: args.maxOutputTokens,
           onKeyEvent,
+          models: args.models,
         },
       );
       args.onProgress?.({
@@ -248,6 +251,7 @@ export async function generateCompliantCompliment(args: {
             jobFunction: args.subject,
             previousText: args.operation === "escalate" ? args.previousText : undefined,
             onKeyEvent,
+            models: args.models,
           })
         : undefined;
       const verified = semantic ? verifyGuidelineOutput(candidate, args.subject, semantic) : preliminary;

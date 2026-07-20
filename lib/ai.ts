@@ -3,6 +3,7 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { generateText, NoObjectGeneratedError, Output, type ModelMessage } from "ai";
 import { z } from "zod";
 import { GuidelineModelOutputSchema, type GuidelineModelOutput } from "./compliment-guidelines";
+import type { ModelSelection } from "./models";
 import {
   classifyGeminiFailure,
   runWithGeminiKey,
@@ -10,9 +11,9 @@ import {
   type GeminiKeyPoolEventHandler,
 } from "./gemini-key-pool";
 
-function getModelIds() {
-  const main = process.env.GEMINI_MODEL_MAIN ?? process.env.GEMINI_MODEL_BACKUP ?? "gemini-3.1-flash-lite";
-  const backup = process.env.GEMINI_MODEL_BACKUP ?? main;
+function getModelIds(selection?: ModelSelection) {
+  const main = selection?.main ?? process.env.GEMINI_MODEL_MAIN ?? process.env.GEMINI_MODEL_BACKUP ?? "gemini-3.1-flash-lite";
+  const backup = selection?.backup ?? process.env.GEMINI_MODEL_BACKUP ?? main;
   return { main, backup };
 }
 
@@ -152,9 +153,9 @@ function combinedModelError(args: {
 
 export async function generateGuidelineCandidate(
   messages: ModelMessage[],
-  options: { temperature?: number; maxOutputTokens?: number; onKeyEvent?: GeminiKeyPoolEventHandler } = {},
+  options: { temperature?: number; maxOutputTokens?: number; onKeyEvent?: GeminiKeyPoolEventHandler; models?: ModelSelection } = {},
 ): Promise<GuidelineModelOutput> {
-  const { main, backup } = getModelIds();
+  const { main, backup } = getModelIds(options.models);
   const prompt = splitSystemMessages(messages);
 
   const tryModel = (modelId: string) => runWithGeminiKey(
@@ -212,9 +213,10 @@ export async function evaluateGuidelineSemantics(args: {
   jobFunction: string;
   previousText?: string;
   onKeyEvent?: GeminiKeyPoolEventHandler;
+  models?: ModelSelection;
 }): Promise<SemanticEvaluation> {
-  const { main, backup } = getModelIds();
-  const validator = process.env.GEMINI_MODEL_VALIDATOR ?? main;
+  const { main, backup } = getModelIds(args.models);
+  const validator = args.models?.validator ?? process.env.GEMINI_MODEL_VALIDATOR ?? main;
   const prompt = `Audit one workplace compliment against Company Guidelines v2.1.
 Return only the structured evaluation. Be conservative: a rule passes only when clearly satisfied.
 Do not provide chain-of-thought. Put only short, outcome-focused reasons in notes.
@@ -284,9 +286,10 @@ export async function evaluateDeckSemantics(args: {
     text: string;
   }>;
   onKeyEvent?: GeminiKeyPoolEventHandler;
+  models?: ModelSelection;
 }): Promise<DeckSemanticEvaluation> {
-  const { main, backup } = getModelIds();
-  const validator = process.env.GEMINI_MODEL_VALIDATOR ?? main;
+  const { main, backup } = getModelIds(args.models);
+  const validator = args.models?.validator ?? process.env.GEMINI_MODEL_VALIDATOR ?? main;
   const prompt = `Audit a three-card workplace compliment deck as one result.
 Return only the structured evaluation. Do not provide chain-of-thought.
 

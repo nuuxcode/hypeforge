@@ -2,6 +2,7 @@ import { providerErrorMessage } from "@/lib/ai";
 import { rateLimitCookie, rateLimitHeaders, readRateLimit } from "@/lib/api-rate-limit";
 import { generateCompliantCompliment, isGuidelineComplianceError } from "@/lib/compliant-generation";
 import { createApiDebug, withDebug } from "@/lib/debug";
+import { sanitizeModelSelection } from "@/lib/models";
 import { getPersona } from "@/lib/personas";
 import { buildTweakMessages } from "@/lib/prompts";
 import { cleanModelText, validateCompliment } from "@/lib/safeText";
@@ -102,6 +103,7 @@ export async function POST(req: Request) {
       operation: "tweak",
       deliveryMode: body.data.deliveryMode,
       debug,
+      models: sanitizeModelSelection(body.data.models),
       temperature: 1,
       maxOutputTokens: 260,
     });

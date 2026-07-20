@@ -9,6 +9,7 @@ import {
 import { distinctnessIssues } from "./deck-distinctness";
 import type { createApiDebug } from "./debug";
 import type { GeminiKeyPoolEvent } from "./gemini-key-pool";
+import type { ModelSelection } from "./models";
 import { fallbackPersonasFor, pickOnePerBucket } from "./personas";
 import { buildInitialMessages } from "./prompts";
 import type {
@@ -86,6 +87,7 @@ async function generateCard(args: {
   deliveryMode: DeliveryMode;
   preference: SoftPreferenceContext;
   debug: DebugLogger;
+  models?: ModelSelection;
   avoidCompliments?: string[];
   diversityFeedback?: string[];
 }): Promise<ComplimentCard> {
@@ -110,6 +112,7 @@ async function generateCard(args: {
       operation: "generate",
       deliveryMode: args.deliveryMode,
       debug: args.debug,
+      models: args.models,
       temperature: 1,
       maxOutputTokens: 260,
     });
@@ -136,6 +139,7 @@ async function fillPersonaSlot(args: {
   deliveryMode: DeliveryMode;
   preference: SoftPreferenceContext;
   debug: DebugLogger;
+  models?: ModelSelection;
 }): Promise<{ card: ComplimentCard; persona: Persona; attemptedPersonaIds: string[] }> {
   const candidates = [args.primary, ...fallbackPersonasFor(args.primary)].slice(0, MAX_SLOT_ATTEMPTS);
   const attemptedPersonaIds: string[] = [];
@@ -234,6 +238,7 @@ export async function generateCompleteDeck(args: {
   deliveryMode: DeliveryMode;
   preference: SoftPreferenceContext;
   debug: DebugLogger;
+  models?: ModelSelection;
 }): Promise<ComplimentCard[]> {
   const selected = pickOnePerBucket();
   args.debug.info("selected personas", selected.map((persona) => ({
@@ -310,6 +315,7 @@ export async function generateCompleteDeck(args: {
           text: card.text,
         })),
         onKeyEvent: keyEventLogger(args.debug),
+        models: args.models,
       });
     } catch (error) {
       const deterministicIssues = deterministicDeckIssues(cards);

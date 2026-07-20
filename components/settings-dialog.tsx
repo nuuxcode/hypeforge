@@ -4,6 +4,8 @@ import Link from "next/link";
 import { Activity, ArrowRight, Settings2, Volume2, X } from "lucide-react";
 import { Tooltip } from "@/components/tooltip";
 import { saveSoundEnabled, useSoundEnabled } from "@/lib/forge-sound";
+import { saveModelSelection, useModelSelection } from "@/lib/model-choice";
+import { GEMINI_MODEL_OPTIONS, type GeminiModelId, type ModelSelection } from "@/lib/models";
 import { saveProofStyle, useProofStyle, type ProofHeadlineStyle } from "@/lib/proof-style";
 import { useDialogFocus } from "@/lib/use-dialog-focus";
 
@@ -20,10 +22,23 @@ const OPTIONS: Array<{ value: ProofHeadlineStyle; title: string; description: st
   },
 ];
 
+const MODEL_ROLES: Array<{ key: keyof ModelSelection; label: string }> = [
+  { key: "main", label: "Writer" },
+  { key: "backup", label: "Backup" },
+  { key: "validator", label: "Judge" },
+];
+
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const dialogRef = useDialogFocus<HTMLElement>(open, onClose);
   const current = useProofStyle();
   const soundEnabled = useSoundEnabled();
+  const models = useModelSelection();
+  const updateModel = (key: keyof ModelSelection, value: string) => {
+    const next: ModelSelection = { ...models };
+    if (value) next[key] = value as GeminiModelId;
+    else delete next[key];
+    saveModelSelection(next);
+  };
   if (!open) return null;
 
   return (
@@ -106,6 +121,34 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
 
         <p className="mt-4 text-xs font-medium leading-5 text-[var(--text-muted)]">
           Both styles show the same 8 rule checks; this only changes how the headline words them. Saved on this device.
+        </p>
+
+        <fieldset className="mt-6 space-y-3">
+          <legend className="mb-3 text-sm font-bold text-[var(--text)]">AI models</legend>
+          <div className="space-y-3">
+            {MODEL_ROLES.map((role) => (
+              <label
+                className="flex items-center justify-between gap-3 rounded-[18px] border border-[var(--line)] bg-[var(--panel-raised)] p-4"
+                key={role.key}
+              >
+                <span className="text-sm font-bold text-[var(--text)]">{role.label}</span>
+                <select
+                  className="min-w-0 max-w-[60%] flex-1 rounded-[12px] border border-[var(--line)] bg-[var(--control-bg)] px-3 py-2 text-sm font-medium text-[var(--text)] transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[var(--focus-ring)]"
+                  value={models[role.key] ?? ""}
+                  onChange={(event) => updateModel(role.key, event.target.value)}
+                >
+                  <option value="">Server default</option>
+                  {GEMINI_MODEL_OPTIONS.map((option) => (
+                    <option key={option.id} value={option.id}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <p className="mt-4 text-xs font-medium leading-5 text-[var(--text-muted)]">
+          Stronger models can be slower and use more quota.
         </p>
 
         <div className="mt-6 border-t border-[var(--line)] pt-5">

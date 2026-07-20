@@ -20,6 +20,8 @@ import {
 } from "@/lib/client-fetch";
 import { isAtDramaCap } from "@/lib/drama";
 import { playForgeSound } from "@/lib/forge-sound";
+import { useModelSelection } from "@/lib/model-choice";
+import type { ModelSelection } from "@/lib/models";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import {
   buildSoftPreferenceContext,
@@ -265,6 +267,12 @@ export default function V2Page() {
     });
   }, []);
 
+  const modelSelection = useModelSelection();
+  const modelBody = useMemo<{ models?: ModelSelection }>(
+    () => (Object.keys(modelSelection).length > 0 ? { models: modelSelection } : {}),
+    [modelSelection],
+  );
+
   const generate = useCallback(async () => {
     if (isGenerating) return;
     if (!trimmedInput || trimmedInput.length < MIN_INPUT_LENGTH) {
@@ -285,6 +293,7 @@ export default function V2Page() {
       personDetails: trimmedDetails || undefined,
       deliveryMode,
       preference: tasteContext,
+      ...modelBody,
     };
     const startedAt = performance.now();
     try {
@@ -339,7 +348,7 @@ export default function V2Page() {
     } finally {
       setIsGenerating(false);
     }
-  }, [deliveryMode, focusDeck, isGenerating, persistDeck, setCards, tasteContext, trimmedDetails, trimmedInput]);
+  }, [deliveryMode, focusDeck, isGenerating, modelBody, persistDeck, setCards, tasteContext, trimmedDetails, trimmedInput]);
 
   const escalate = useCallback(
     async (cardId: string) => {
@@ -370,6 +379,7 @@ export default function V2Page() {
         currentText: card.text,
         history: card.history,
         dramaLevel: card.dramaLevel,
+        ...modelBody,
       };
       const startedAt = performance.now();
       try {
@@ -430,7 +440,7 @@ export default function V2Page() {
         setEscalationProgress((current) => ({ ...current, [cardId]: undefined }));
       }
     },
-    [announceCardCompletion, cards, clearCardCompletion, persistDeck, setCardError, setCards],
+    [announceCardCompletion, cards, clearCardCompletion, modelBody, persistDeck, setCardError, setCards],
   );
 
   const retryCard = useCallback(
@@ -450,6 +460,7 @@ export default function V2Page() {
         jobFunction: card.jobFunction,
         personDetails: card.personDetails,
         deliveryMode: card.deliveryMode ?? "public",
+        ...modelBody,
       };
       const startedAt = performance.now();
       try {
@@ -499,7 +510,7 @@ export default function V2Page() {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
     },
-    [announceCardCompletion, cards, clearCardCompletion, persistDeck, setCardError, setCards],
+    [announceCardCompletion, cards, clearCardCompletion, modelBody, persistDeck, setCardError, setCards],
   );
 
   const tweakCard = useCallback(
@@ -524,6 +535,7 @@ export default function V2Page() {
         history: card.history,
         dramaLevel: card.dramaLevel,
         feedback,
+        ...modelBody,
       };
       const startedAt = performance.now();
       try {
@@ -575,7 +587,7 @@ export default function V2Page() {
         setPendingCardActions((current) => ({ ...current, [cardId]: undefined }));
       }
     },
-    [announceCardCompletion, cards, clearCardCompletion, persistDeck, setCardError, setCards, tweakDrafts],
+    [announceCardCompletion, cards, clearCardCompletion, modelBody, persistDeck, setCardError, setCards, tweakDrafts],
   );
 
   const setCardFeedback = useCallback(

@@ -2,6 +2,7 @@ import "./zod-config";
 import { z } from "zod";
 import { MAX_COMPLIMENT_LENGTH } from "./safeText";
 import { hasFunctionContext, VerifiedGuidelineComplianceSchema } from "./compliment-guidelines";
+import { GEMINI_MODEL_IDS } from "./models";
 import type { SoftPreferenceContext } from "./types";
 
 export const MIN_INPUT_LENGTH = 3;
@@ -35,6 +36,14 @@ const INJECTION_PATTERNS = [
   /\bexpose (?:your|the) prompt\b/i,
 ];
 
+export const ModelSelectionSchema = z
+  .object({
+    main: z.enum(GEMINI_MODEL_IDS).optional(),
+    backup: z.enum(GEMINI_MODEL_IDS).optional(),
+    validator: z.enum(GEMINI_MODEL_IDS).optional(),
+  })
+  .optional();
+
 export const GenerateBodySchema = z.object({
   input: z.string().optional(),
   jobFunction: z.string().optional(),
@@ -46,6 +55,7 @@ export const GenerateBodySchema = z.object({
       disliked: z.array(z.string().max(180)).max(3).default([]),
     })
     .optional(),
+  models: ModelSelectionSchema,
 });
 
 export const EscalateBodySchema = z.object({
@@ -57,6 +67,7 @@ export const EscalateBodySchema = z.object({
   currentText: z.string().min(1).max(MAX_COMPLIMENT_LENGTH),
   history: z.array(z.string().min(1).max(MAX_COMPLIMENT_LENGTH)).min(1).max(MAX_HISTORY_ITEMS),
   dramaLevel: z.number().int().min(1).max(20),
+  models: ModelSelectionSchema,
 });
 
 export const RetryBodySchema = z.object({
@@ -65,6 +76,7 @@ export const RetryBodySchema = z.object({
   jobFunction: z.string().optional(),
   personDetails: z.string().max(MAX_DETAILS_LENGTH).optional(),
   deliveryMode: DeliveryModeSchema.default("direct"),
+  models: ModelSelectionSchema,
 });
 
 export const TweakBodySchema = z.object({
@@ -77,6 +89,7 @@ export const TweakBodySchema = z.object({
   history: z.array(z.string().min(1).max(MAX_COMPLIMENT_LENGTH)).min(1).max(MAX_HISTORY_ITEMS),
   dramaLevel: z.number().int().min(1).max(20),
   feedback: z.string().min(3).max(240),
+  models: ModelSelectionSchema,
 });
 
 export const ShareDeckBodySchema = z.object({
