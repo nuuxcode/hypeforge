@@ -1,6 +1,7 @@
 "use client";
 
-import { BookOpen, History, Moon, Settings2, Share2, Sparkles, Sun } from "lucide-react";
+import Image from "next/image";
+import { BookOpen, History, Moon, Settings2, Share2, Sun } from "lucide-react";
 import { Tooltip } from "@/components/tooltip";
 
 export type ThemeMode = "light" | "dark";
@@ -27,11 +28,15 @@ export function HypeForgeHeader({
   return (
     <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--chrome-bg)] backdrop-blur-xl">
       <div className="mx-auto flex min-h-16 max-w-[1500px] items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="grid size-8 shrink-0 place-items-center rounded-[10px] bg-[var(--accent-soft)]">
-            <Sparkles aria-hidden="true" className="size-4 text-[var(--accent)]" />
-          </div>
-          <p className="v2-display text-lg font-semibold text-[var(--text)]">HypeForge</p>
+        <div className="flex min-w-0 items-center">
+          <Image
+            alt="HypeForge"
+            className="h-9 w-auto shrink-0"
+            height={200}
+            priority
+            src={theme === "dark" ? "/brand/hypeforge-logo-dark.png" : "/brand/hypeforge-logo-light.png"}
+            width={620}
+          />
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
           <Tooltip align="end" className="hidden min-[380px]:inline-flex" label="Compliment guide">
