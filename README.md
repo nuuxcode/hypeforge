@@ -30,7 +30,7 @@ Turns a job title or person description into three wildly enthusiastic, slightly
 
 ## Tech Stack
 
-Next.js App Router, TypeScript, Tailwind CSS, server API routes, Vercel AI SDK, Gemini via `@ai-sdk/google`, Zod, Vercel Blob for durable production shares, Playwright, axe-core, and a signed HMAC cookie rate limit.
+Next.js App Router, TypeScript, Tailwind CSS, server API routes, Vercel AI SDK, Gemini via `@ai-sdk/google`, Zod, Upstash Redis for durable production shares and diagnostics logs, Playwright, axe-core, and a signed HMAC cookie rate limit.
 
 ## Model Choice
 
@@ -58,9 +58,9 @@ cp .env.example .env.local
 
 Set `GEMINI_API_KEY` and `RATELIMIT_SECRET`. Optional numbered backups (`GEMINI_API_KEY_2` and up) enable automatic key rotation; `HYPEFORGE_GEMINI_API_KEY` remains as a legacy single-key fallback when no pool key is set. Set `NEXT_PUBLIC_SITE_URL` to the deployed public origin so canonical URLs, sitemap entries, and social metadata point to the real site. HypeForge has no local/internal text generator fallback; every compliment comes from Gemini. If Gemini quota is exhausted, the app shows a friendly error and logs the real provider details server-side. Keep `.env.local` out of git.
 
-For private operational history, enable `HYPEFORGE_CAPTURE_AI_FAILURES`, set independent random values for `HYPEFORGE_ADMIN_CODE` and `HYPEFORGE_ADMIN_SESSION_SECRET`, and optionally enable `HYPEFORGE_DEBUG_STACKS`. Production logs use the private Vercel Blob store; local logs stay under `.data/`. Person input is stored only as a short SHA-256 fingerprint and word count. API keys, authorization headers, and hidden prompts are redacted or omitted.
+For private operational history, enable `HYPEFORGE_CAPTURE_AI_FAILURES`, set independent random values for `HYPEFORGE_ADMIN_CODE` and `HYPEFORGE_ADMIN_SESSION_SECRET`, and optionally enable `HYPEFORGE_DEBUG_STACKS`. Production logs use Upstash Redis when `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` are set (kept in one capped list read with a single `LRANGE`); without them, local logs stay under `.data/`. Person input is stored only as a short SHA-256 fingerprint and word count. API keys, authorization headers, and hidden prompts are redacted or omitted.
 
-Shared decks use a local JSON store by default at `.data/hypeforge-shares.json`. On Vercel, connect a private Blob store and the app automatically uses `BLOB_STORE_ID`/`BLOB_READ_WRITE_TOKEN`; another host may use `HYPEFORGE_SHARE_STORE_PATH` on a persistent disk. Shared deck pages are intentionally `noindex`: they get good link previews without making a recipient's praise searchable.
+Shared decks use a local JSON store by default at `.data/hypeforge-shares.json`. In production the app stores each share in Upstash Redis under a namespaced `hypeforge:share:<slug>` key when `UPSTASH_REDIS_REST_URL`/`UPSTASH_REDIS_REST_TOKEN` are set; another host may use `HYPEFORGE_SHARE_STORE_PATH` on a persistent disk. Shared deck pages are intentionally `noindex`: they get good link previews without making a recipient's praise searchable.
 
 ## Run Locally
 
